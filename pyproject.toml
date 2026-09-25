@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "django-vidlock"
+dynamic = ["version"]
+description = "Encrypted single-file HLS for Django: a downloaded video is worth nothing without its key."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Nader Yasser", email = "naderyasser023@gmail.com" }]
+keywords = ["django", "hls", "aes-128", "video", "encryption", "lms", "cloudflare-r2", "s3", "ffmpeg"]
+classifiers = [
+  "Framework :: Django",
+  "Framework :: Django :: 4.2",
+  "Framework :: Django :: 5.0",
+  "Framework :: Django :: 5.1",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Multimedia :: Video",
+  "Topic :: Security :: Cryptography",
+]
+dependencies = ["Django>=4.2"]
+
+[project.optional-dependencies]
+s3 = ["boto3>=1.28"]
+test = ["pytest>=8", "pytest-django>=4.8", "cryptography>=42"]
+
+[project.urls]
+Homepage = "https://github.com/naderyasser/django-vidlock"
+Issues = "https://github.com/naderyasser/django-vidlock/issues"
+
+[tool.hatch.version]
+path = "src/vidlock/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vidlock"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = [".", "src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.black]
+line-length = 110
+skip-string-normalization = true
