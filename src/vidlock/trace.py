@@ -19,7 +19,10 @@ from django.utils.crypto import salted_hmac
 
 
 def _code(user_id, day: datetime.date, secret: str | None = None) -> str:
-    digest = salted_hmac('vidlock.trace', f'{user_id}:{day.isoformat()}', secret=secret).digest()
+    # sha256 pinned: Django 7 changes the default, which would change every code.
+    digest = salted_hmac(
+        'vidlock.trace', f'{user_id}:{day.isoformat()}', secret=secret, algorithm='sha256'
+    ).digest()
     return base64.b32encode(digest).decode()[:6]
 
 

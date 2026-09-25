@@ -39,7 +39,7 @@ class Claims(NamedTuple):
 def _fingerprint(kind: str, value: str | None) -> str:
     if not value:
         return ''
-    return salted_hmac(f'vidlock.fp.{kind}', value).hexdigest()[:16]
+    return salted_hmac(f'vidlock.fp.{kind}', value, algorithm='sha256').hexdigest()[:16]
 
 
 def account_fingerprint(user) -> str:

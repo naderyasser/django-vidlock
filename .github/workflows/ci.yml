@@ -12,8 +12,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install ruff==0.15.8 black==24.8.0
@@ -40,8 +40,8 @@ jobs:
           - { python: '3.12', django: '6.0' }
           - { python: '3.14', django: '6.0' }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
           allow-prereleases: true
@@ -53,8 +53,8 @@ jobs:
     # hls.js in Google Chrome: fetches the key, decrypts and plays the stream.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg
@@ -66,8 +66,8 @@ jobs:
   package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - run: pip install build twine
