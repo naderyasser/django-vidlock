@@ -65,8 +65,10 @@ DEFAULTS: dict[str, Any] = {
     # the key crosses the network wrapped for that page alone, so copying it
     # from DevTools into a downloader gets nothing). Every browser with
     # MediaSource (all desktops, Android, iOS 17.1+) uses it anyway; turning
-    # this on refuses the rest, i.e. download tools and iPhones older than
-    # iOS 17.1. Off: those raw fetches only count towards the risk score.
+    # this on refuses the rest: generic download tools fed a copied cookie,
+    # and iPhones older than iOS 17.1. (A tool written against vidlock's own
+    # protocol can still do the exchange; the pace and risk score remain.)
+    # Off: raw fetches only count towards the risk score.
     'REQUIRE_WRAPPED_KEY': False,
     # Streams one viewer may play at once, on different devices (browser
     # sessions or app logins). A new device past the limit takes over the

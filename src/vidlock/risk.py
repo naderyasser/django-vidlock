@@ -26,6 +26,10 @@ Events:
 ``tamper``
     The player found MediaSource functions replaced by a page script or an
     extension — how "save the stream" extensions work.
+``shared_session``
+    One stream heartbeating from two networks at once: its session cookie was
+    copied to another device (the "cookie editor" way of sharing an account,
+    which MAX_STREAMS alone cannot see, since both devices hold one lease).
 
 Kept in Django's cache for a day. To keep a record, listen to the signal.
 """
@@ -54,6 +58,7 @@ DEFAULT_WEIGHTS = {
     'takeover': 2,
     'many_ips': 1,
     'tamper': 4,
+    'shared_session': 4,
 }
 
 _PREFIX = 'vidlock:risk'
@@ -153,6 +158,31 @@ def network(ip: str) -> str:
         return ''
     prefix = 24 if address.version == 4 else 48
     return str(ipaddress.ip_network(f'{address}/{prefix}', strict=False))
+
+
+#: Two heartbeats of one stream from different networks within this many
+#: seconds are two devices, not one phone moving from Wi-Fi to mobile data.
+CONCURRENT_WINDOW = 45
+
+
+def stream_seen_from(user, lease: str, ip: str, namespace: str = '', request=None) -> None:
+    """A heartbeat of ``lease`` from ``ip``: note a stream alive on two
+    networks at the same time."""
+    net = network(ip)
+    if not lease or not net:
+        return
+    user_id = getattr(user, 'pk', user)
+    key = f'{_PREFIX}:lease-nets:{namespace}:{user_id}:{lease}'
+    now = time.time()
+    try:
+        seen = {n: at for n, at in (cache.get(key) or {}).items() if now - at <= CONCURRENT_WINDOW}
+        others = [n for n in seen if n != net]
+        seen[net] = now
+        cache.set(key, seen, 3600)
+    except Exception:
+        return
+    if others:
+        note(user, 'shared_session', namespace, request, once=lease)
 
 
 def seen_from(user, ip: str, namespace: str = '', request=None) -> None:

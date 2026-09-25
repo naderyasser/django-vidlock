@@ -27,7 +27,14 @@
   fullscreen, where nothing can be drawn over the video.
   `manage.py vidlock_trace` turns a code back into the account.
 
+* **Shared sessions.** One stream heartbeating from two networks at once (a
+  copied session cookie) adds `shared_session` to the risk score.
+
 ### Everything else
+
+* `vidlock.pipeline.seal_later(instance, key)` records an upload and queues
+  its sealing after the commit. `vidlock.contrib.celery` and
+  `vidlock.contrib.django_tasks` provide ready-made `ENQUEUE_SEAL` wrappers.
 
 * Heartbeat endpoint (`vidlock:heartbeat`); `playback_info` returns
   `heartbeat_url`, `heartbeat_interval` and `key_exchange`.

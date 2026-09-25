@@ -177,7 +177,24 @@ Then run `python manage.py makemigrations && python manage.py migrate`, and
 
 ### After an upload lands in the bucket
 
-Record the key, then seal it in the background:
+Record the key and queue the sealing in one call:
+
+```python
+from vidlock.pipeline import seal_later
+
+seal_later(lesson, uploaded_key)   # saves the row, queues after the commit
+```
+
+It uses `VIDLOCK['ENQUEUE_SEAL']`, and ready-made wrappers ship with
+vidlock:
+
+```python
+VIDLOCK = {..., 'ENQUEUE_SEAL': 'vidlock.contrib.celery.enqueue'}        # Celery
+VIDLOCK = {..., 'ENQUEUE_SEAL': 'vidlock.contrib.django_tasks.enqueue'}  # Django 6 Tasks
+```
+
+Without it, `seal_later` seals inline after the commit. Or do the
+bookkeeping yourself:
 
 ```python
 from django.db import transaction
@@ -305,7 +322,9 @@ the limit, it takes the stream over. The first device's next key request or
 heartbeat (every 30 seconds) is refused, and its player stops with *"This
 account is watching on another device"*; `reload()` takes the stream back.
 The player's own automatic renewals never take a stream back, so two devices
-cannot keep stealing it from each other. A stream whose heartbeats stop, for
+cannot keep stealing it from each other. Copying the session cookie itself
+to a second device shares one stream. The risk score catches that as
+`shared_session`, when one stream heartbeats from two networks at once. A stream whose heartbeats stop, for
 example on a laptop that went to sleep, lapses after `STREAM_TIMEOUT` and
 comes back by itself unless another device took its place.
 
@@ -322,6 +341,7 @@ Each of these adds its weight to a viewer's score for the day:
 | `takeover` | 2 | A device took the stream from another. |
 | `many_ips` | 1 | Each network past `MAX_NETWORKS_PER_DAY`. |
 | `tamper` | 4 | The player found MediaSource functions replaced, which is how "save the stream" extensions work. |
+| `shared_session` | 4 | One stream heartbeating from two networks at once: the session cookie was copied to another device, a way of sharing an account that `MAX_STREAMS` alone cannot see. |
 
 When the score reaches `RISK_THRESHOLD` (10), vidlock logs a warning and
 sends `vidlock.signals.viewer_flagged`. With `RISK_SUSPEND_SECONDS`, it also
@@ -397,7 +417,7 @@ pause while it is true.
 | **Session binding** (web) | A key URL pasted into a download tool: it has no session cookie. Logging out voids the session's tokens. |
 | **Password binding** (web and app) | A password change voids every token that viewer already holds. |
 | **Fetch Metadata** (web) | A key opened in a tab or requested cross-site is refused. With `STRICT_FETCH_METADATA`, so is any request without the `Sec-Fetch-*` headers every current browser sends. |
-| **Key exchange** (web) | Copying a key from DevTools into a downloader: what crosses the network is sealed to that page's private key, which never leaves WebCrypto. `REQUIRE_WRAPPED_KEY` refuses raw keys to web tokens altogether. |
+| **Key exchange** (web) | Copying a key from DevTools into a downloader: what crosses the network is sealed to that page's private key, which never leaves WebCrypto. `REQUIRE_WRAPPED_KEY` refuses raw keys to web tokens altogether, which stops generic tools fed a copied cookie. A tool written against vidlock's own (open) protocol can still do the exchange, and then runs into the pace and the risk score. |
 | **Key rotation and pace** | Ripping a lesson at once: every minute has its own key, handed out no faster than 2× playback. |
 | **Depth and breadth limits** | Repeated key pulls, and harvesting a whole course one lesson at a time. |
 | **One screen at a time** | Sharing an account: the second device takes over, and the first stops. |
@@ -490,7 +510,7 @@ recover any video later with `vidlock_export`.
 | `KEY_FETCHES_PER_HOUR` | `20` | Depth limit: key fetches per viewer, video and hour. |
 | `KEY_VIDEOS_PER_HOUR` | `30` | Breadth limit: different videos keyed per viewer and hour. `None` turns it off. |
 | `STRICT_FETCH_METADATA` | `False` | Also refuse web key requests that carry no `Sec-Fetch-*` headers. Test with Safari before you enable it. |
-| `REQUIRE_WRAPPED_KEY` | `False` | Refuse web keys outside the page's key exchange: download tools, and iPhones older than iOS 17.1. |
+| `REQUIRE_WRAPPED_KEY` | `False` | Refuse web keys outside the page's key exchange: generic download tools fed a copied cookie, and iPhones older than iOS 17.1. |
 | `MAX_STREAMS` | `None` | Devices that may play at once per viewer; `1` stops account sharing. |
 | `STREAM_TIMEOUT` / `HEARTBEAT_SECONDS` | `90` / `30` | A stream lapses after this long without a heartbeat / how often the player sends one. |
 | `RISK_THRESHOLD` / `RISK_SUSPEND_SECONDS` / `RISK_WEIGHTS` | `10` / `0` / `{}` | The daily score that flags a viewer, how long a flagged viewer is paused (`0`: flag only), and weight overrides. |

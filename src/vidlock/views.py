@@ -271,4 +271,5 @@ def heartbeat_view(request, video_id):
         risk.played(user.pk, found.lease, video_id, namespace)
     if isinstance(report, dict) and report.get('tamper'):
         risk.note(user, 'tamper', namespace, request, once=found.lease or str(video_id))
+    risk.stream_seen_from(user, found.lease, backend.client_ip(request), namespace, request)
     return JsonResponse({'ok': True, 'interval': int(conf.get('HEARTBEAT_SECONDS'))})

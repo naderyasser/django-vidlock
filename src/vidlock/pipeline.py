@@ -38,6 +38,31 @@ def wants(key: str | None) -> bool:
     return packager.available() and os.path.splitext(key or '')[1].lower() in packager.SOURCE_EXTENSIONS
 
 
+def seal_later(instance, video_key: str | None = None) -> bool:
+    """Record a new upload on ``instance`` and queue its sealing after the
+    transaction commits, through ``VIDLOCK['ENQUEUE_SEAL']`` (inline when
+    unset). Returns whether sealing was queued. Replaces the four lines of
+    bookkeeping in the README:
+
+        lesson.video_key = uploaded_key
+        seal_later(lesson)
+    """
+    key = video_key or instance.video_key
+    model = type(instance)
+    instance.forget_seal()
+    instance.video_key = key
+    queued = wants(key)
+    instance.sealed_state = model.STATE_PENDING if queued else model.STATE_NONE
+    instance.save()
+    if queued:
+        enqueue = conf.load('ENQUEUE_SEAL')
+        pk = instance.pk
+        transaction.on_commit(
+            (lambda: enqueue(model, pk, key)) if enqueue else (lambda: seal(model, pk, key))
+        )
+    return queued
+
+
 def sealed_key_for(source_key: str) -> str:
     """The .ts sits next to the source, under a new random name."""
     folder = source_key.rsplit('/', 1)[0] + '/' if '/' in source_key else ''
