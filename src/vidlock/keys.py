@@ -5,9 +5,10 @@ as is, a leaked database dump plus the bucket would be every course in the
 clear. So the key is wrapped under a key-encryption key (KEK) that lives in
 your settings, not in the database: the dump alone opens nothing.
 
-Standard library only: a 16-byte payload needs one block of keystream, so
-HMAC-SHA256 serves as the PRF in counter mode with a fresh random nonce, and a
-second HMAC authenticates the result (encrypt-then-MAC, separate subkeys).
+Standard library only: HMAC-SHA256 serves as the PRF in counter mode with a
+fresh random nonce, and a second HMAC authenticates the result
+(encrypt-then-MAC, separate subkeys). A video with key rotation stores one
+16-byte key per rotation period, all wrapped together in one blob.
 
 Blob layout: ``VLK1 | kek id (4) | nonce (16) | ciphertext | tag (16)``.
 A value without the ``VLK1`` prefix is a raw key written by vidlock 0.1 and is
@@ -57,7 +58,14 @@ def _keks() -> list[_Kek]:
 
 
 def _stream(kek: _Kek, nonce: bytes, length: int) -> bytes:
-    return hmac.new(kek.enc, nonce, hashlib.sha256).digest()[:length]
+    # Block 0 is HMAC(nonce) alone, as in 0.2, so blobs of up to 32 bytes
+    # written then still open; later blocks add a counter.
+    blocks = [hmac.new(kek.enc, nonce, hashlib.sha256).digest()]
+    counter = 1
+    while len(blocks) * 32 < length:
+        blocks.append(hmac.new(kek.enc, nonce + counter.to_bytes(4, 'big'), hashlib.sha256).digest())
+        counter += 1
+    return b''.join(blocks)[:length]
 
 
 def _tag(kek: _Kek, head: bytes, body: bytes) -> bytes:
@@ -65,10 +73,10 @@ def _tag(kek: _Kek, head: bytes, body: bytes) -> bytes:
 
 
 def wrap(key: bytes) -> bytes:
-    """Encrypt a content key under the current KEK."""
+    """Encrypt a content key (or several, concatenated) under the current KEK."""
     key = bytes(key)
-    if not 0 < len(key) <= 32:
-        raise ValueError('a content key is 1 to 32 bytes')
+    if not 0 < len(key) <= 64 * 1024:
+        raise ValueError('content keys are 1 byte to 64 KiB in all')
     kek = _keks()[0]
     nonce = secrets.token_bytes(_NONCE)
     body = bytes(a ^ b for a, b in zip(key, _stream(kek, nonce, len(key)), strict=True))

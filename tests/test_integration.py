@@ -161,7 +161,8 @@ class TestChecks:
 
     def test_the_test_settings_are_clean(self, settings):
         settings.VIDLOCK = {**settings.VIDLOCK, 'KEY_ENCRYPTION_KEYS': ['x']}
-        assert checks.check_settings(None) == []
+        # W007: the tests run on LocMemCache, which a real site should not.
+        assert [p.id for p in checks.check_settings(None)] == ['vidlock.W007']
 
 
 class TestAdmin:

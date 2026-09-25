@@ -45,7 +45,7 @@ classifiers = [
   "Topic :: Security :: Cryptography",
   "Typing :: Typed",
 ]
-dependencies = ["Django>=4.2"]
+dependencies = ["Django>=4.2", "cryptography>=41"]
 
 [project.optional-dependencies]
 s3 = ["boto3>=1.28"]

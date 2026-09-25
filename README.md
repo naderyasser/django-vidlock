@@ -30,26 +30,39 @@ playable copy. Paid-course platforms lose their catalogue this way.
 1. **Seals every upload.** ffmpeg remuxes the MP4 into **one** AES-128
    encrypted MPEG-TS and a playlist of byte ranges. It does not re-encode: a
    78 MB lesson takes about a second and under 50 MB of RAM. The sealed file
-   replaces the MP4 in your bucket. The 16-byte key and the playlist live in
-   your database, and the key is itself encrypted there.
+   replaces the MP4 in your bucket. **Every minute of video has its own
+   key.** The keys and the playlist live in your database, where the keys are
+   themselves encrypted.
 2. **Hands the key only to a viewer you approve.** Playlist and key URLs carry
    a token bound to one viewer, one video, one login session and ten minutes.
    Your `can_watch()` runs again on every playlist and key request, so a
    refund, a revoked enrolment, a logout or a password change takes effect
    immediately.
-3. **Refuses the key to download tools.** A browser token opens the key only
-   alongside the same session cookie, on a same-site fetch. That means a URL
-   pasted into yt-dlp or N_m3u8DL-RE is refused. Two limits catch what gets
-   past that:
-   * *depth*: the same video's key fetched over and over;
-   * *breadth*: many different videos' keys in an hour, which is how a whole
-     course gets harvested.
-
-   A signal fires when either limit is crossed, so you hear about it.
-4. **Names the recorder.** A moving watermark with the viewer's name (or
-   phone, or order id) is drawn over the video, in fullscreen too, so a
-   screen recording points back to its source.
-5. **Plays everywhere.** The bundled script uses hls.js wherever MediaSource
+3. **Refuses keys to download tools.**
+   * A browser token opens a key only alongside the same session cookie, on a
+     same-site fetch, so a URL pasted into yt-dlp or N_m3u8DL-RE is refused.
+   * **The key never crosses the network in the clear.** The page makes an
+     ECDH key pair whose private half never leaves the browser's crypto
+     engine, and each key is sealed to it. Copying "the key" from DevTools
+     into a downloader, the most common rip, gets nothing usable.
+   * **Keys go out no faster than someone could watch**: at most twice
+     playback speed, per viewer and video. A tool that wants a whole lesson
+     waits most of its length, and a copied key opens one minute.
+   * Limits on *depth* (the same key over and over) and *breadth* (many
+     videos in an hour, which is how a course gets harvested).
+4. **Stops account sharing.** With `MAX_STREAMS = 1`, a second device that
+   opens a video takes the stream over, and the first one stops with a
+   message. A heartbeat keeps each stream's lease.
+5. **Scores suspicion.** Refused keys, keys fetched but never played, raw key
+   fetches, takeovers, too many networks in a day, and "save the stream"
+   extensions detected by the player all add to a daily score per viewer.
+   Past a threshold you get a signal, and optionally the account is paused
+   automatically.
+6. **Names the recorder.** A moving watermark with the viewer's name, a
+   six-letter code and the time is drawn over the video, and a faint copy
+   covers the whole frame, fullscreen included. `manage.py vidlock_trace
+   <code>` turns a leaked recording back into the account that made it.
+7. **Plays everywhere.** The bundled script uses hls.js wherever MediaSource
    exists and native HLS on Safari/iOS. Mobile apps hand the same URL to
    ExoPlayer or AVPlayer. Signed URLs are renewed before they expire without
    reloading the stream.
@@ -62,10 +75,12 @@ upload.mp4 ──► vidlock.pipeline.seal  (your worker: Celery, RQ, Django Tas
                  ├── bucket:   <random>.ts          (encrypted, one object)
                  └── database: playlist + wrapped key
 
-page ──► your playback view ──► playback_info()  {url, key_url, media_url, watermark…}
-player ──► /video/<id>/media.m3u8?t=…   can_watch() ✓  token ✓
-       ──► /video/<id>/key?t=…          can_watch() ✓  token ✓  session ✓  limits ✓
-       ──► bucket (signed Range GETs)   encrypted bytes, decrypted in the browser
+page ──► your playback view ──► playback_info()  {url, key_url, heartbeat_url, watermark…}
+player ──► /video/<id>/media.m3u8?t=…      can_watch() ✓  token ✓  stream lease ✓
+       ──► /video/<id>/key?t=…&k=<n>       can_watch() ✓  token ✓  session ✓  lease ✓
+                                            pace ✓  limits ✓  → key n, sealed to this page (ECDH)
+       ──► /video/<id>/heartbeat?t=…       keeps the lease, proves playback, reports tampering
+       ──► bucket (signed Range GETs)      encrypted bytes, decrypted in the browser
 ```
 
 ### Why one file
@@ -80,12 +95,19 @@ Compared with the usual hundreds of segment files:
 
 ### What it is not
 
-**It is not DRM.** Anyone with a valid token and the matching session can,
-with effort, recover the key, because it has to reach the browser for the
-video to play. vidlock makes the downloaded file useless, makes the easy
-tools fail, and makes a screen recording traceable. It does not stop a
-determined engineer. If you need that, you need Widevine/FairPlay/PlayReady
-and their licence fees.
+**It is not DRM.** The keys have to reach the browser for the video to
+play, so someone who reverse-engineers the page, or an extension that copies
+what the player hands to MediaSource, can still end up with the video. What
+vidlock does is:
+
+* make the downloaded file useless;
+* make the easy tools fail;
+* make bulk ripping slow and noisy;
+* make sharing an account stop working;
+* make a screen recording point back to the account.
+
+If you need more than that, you need Widevine/FairPlay/PlayReady and their
+licence fees.
 
 ## Requirements
 
@@ -240,6 +262,7 @@ in the path). `attach` also accepts these options:
 | `messages` | Your own wording, e.g. `{failed: '…', offline: '…'}`. |
 | `watermark` | `false` to hide it, or `{text, opacity, interval}` to override the server's. |
 | `hlsConfig` | Merged into hls.js's config (buffer sizes, ABR tuning…). |
+| `onEvicted` | `(message) => {}`, called when the stream moved to another device or the account was paused. `reload()` takes it back. |
 | `onHls` | `(hls) => {}`, called with the hls.js instance before it loads, e.g. for analytics. |
 | `headers` | Extra headers for the playback request, e.g. a CSRF or auth header. |
 
@@ -247,12 +270,75 @@ in the path). `attach` also accepts these options:
 
 ### The watermark
 
-Return text from `SealedBackend.watermark(user, video)` and the player draws
-it over the video at 40% opacity, moving to a new spot every eight seconds.
-Deleting it from the developer console puts it straight back. In fullscreen,
-the player fullscreens a frame around the video so the watermark stays
-visible. The exception is iOS, whose own fullscreen player draws nothing over
-itself; use `playsinline` to keep iPhone viewers inline.
+Return text from `SealedBackend.watermark(user, video)`. The player then
+draws it over the video with a six-letter code and the current time, at 40%
+opacity, moving to a new spot every eight seconds. A faint copy is tiled
+across the whole frame, so cropping the moving one out leaves the other
+behind. Deleting, hiding or fading either of them from the developer console
+puts it straight back. In fullscreen, the player fullscreens a frame around
+the video so the watermark stays visible.
+
+iPhone's own fullscreen player draws nothing over the video, so the player
+leaves it straight away. Pass `watermark: {allowNativeFullscreen: true}` to
+allow it anyway. Other watermark options: `opacity`, `patternOpacity`,
+`pattern: false`, `clock: false` and `interval`.
+
+### Tracing a leak
+
+The code changes every day and for every viewer, and means nothing without
+your `SECRET_KEY`:
+
+```bash
+manage.py vidlock_trace K7QMZ4               # searches the last 60 days
+manage.py vidlock_trace K7QMZ4 --day 2026-09-25
+```
+
+## One screen at a time
+
+```python
+VIDLOCK = {..., 'MAX_STREAMS': 1}
+```
+
+A stream belongs to a device: its browser session, or its app login. Two
+tabs of the same browser share one. When a second device opens a video past
+the limit, it takes the stream over. The first device's next key request or
+heartbeat (every 30 seconds) is refused, and its player stops with *"This
+account is watching on another device"*; `reload()` takes the stream back.
+The player's own automatic renewals never take a stream back, so two devices
+cannot keep stealing it from each other. A stream whose heartbeats stop, for
+example on a laptop that went to sleep, lapses after `STREAM_TIMEOUT` and
+comes back by itself unless another device took its place.
+
+## The risk score
+
+Each of these adds its weight to a viewer's score for the day:
+
+| Event | Weight | |
+|---|---|---|
+| `depth` / `breadth` / `pace` | 3 / 5 / 3 | A key limit refused a key. |
+| `fetch_metadata` | 2 | A web key request that came cross-site or as a page load. |
+| `raw_key` | 1 | A web key fetched without the page's key exchange: a downloader fed a copied cookie (or an iPhone older than iOS 17.1). |
+| `key_without_playback` | 3 | The browser got a key and never reported playing it. |
+| `takeover` | 2 | A device took the stream from another. |
+| `many_ips` | 1 | Each network past `MAX_NETWORKS_PER_DAY`. |
+| `tamper` | 4 | The player found MediaSource functions replaced, which is how "save the stream" extensions work. |
+
+When the score reaches `RISK_THRESHOLD` (10), vidlock logs a warning and
+sends `vidlock.signals.viewer_flagged`. With `RISK_SUSPEND_SECONDS`, it also
+refuses that viewer keys for that long, and their player says the account is
+paused. `manage.py vidlock_risk <user>` shows the score and
+`manage.py vidlock_risk <user> --clear` lifts the pause. Tune the weights
+with `RISK_WEIGHTS`. Behind a proxy or CDN, override
+`SealedBackend.client_ip(request)`.
+
+```python
+from django.dispatch import receiver
+from vidlock.signals import viewer_flagged
+
+@receiver(viewer_flagged)
+def review(sender, user, score, events, **kwargs):
+    Flag.objects.create(user=user, score=score, events=events)   # your own model
+```
 
 ## Storage
 
@@ -288,7 +374,18 @@ django-ninja all set `request.auth`), and vidlock issues an **app** token,
 which needs no cookie. Hand `url` to ExoPlayer's `HlsMediaSource` or to
 `AVPlayer`; both fetch the key themselves. Before `expires_in` runs out, ask
 the endpoint again and reload at the current position. App tokens are
-protected by the fetch limits and by the password binding (see below).
+protected by the fetch limits, the key pace and the password binding.
+
+**Heartbeat.** With `MAX_STREAMS` set, the app must also POST to
+`heartbeat_url` every `heartbeat_interval` seconds, with a JSON body such as
+`{"playing": true}`. A `409` answer means the stream moved to another
+device, so stop playback.
+
+**Block screen recording.** On Android, set `FLAG_SECURE` on the player's
+window (`window.setFlags(FLAG_SECURE, FLAG_SECURE)`). On iOS, where only
+FairPlay content is blacked out by the system, watch
+`UIScreen.main.isCaptured` (`UIScreen.capturedDidChangeNotification`) and
+pause while it is true.
 
 ## Security model
 
@@ -300,8 +397,12 @@ protected by the fetch limits and by the password binding (see below).
 | **Session binding** (web) | A key URL pasted into a download tool: it has no session cookie. Logging out voids the session's tokens. |
 | **Password binding** (web and app) | A password change voids every token that viewer already holds. |
 | **Fetch Metadata** (web) | A key opened in a tab or requested cross-site is refused. With `STRICT_FETCH_METADATA`, so is any request without the `Sec-Fetch-*` headers every current browser sends. |
+| **Key exchange** (web) | Copying a key from DevTools into a downloader: what crosses the network is sealed to that page's private key, which never leaves WebCrypto. `REQUIRE_WRAPPED_KEY` refuses raw keys to web tokens altogether. |
+| **Key rotation and pace** | Ripping a lesson at once: every minute has its own key, handed out no faster than 2× playback. |
 | **Depth and breadth limits** | Repeated key pulls, and harvesting a whole course one lesson at a time. |
-| **Watermark** | Screen recording, which no web technology can prevent, becomes traceable. |
+| **One screen at a time** | Sharing an account: the second device takes over, and the first stops. |
+| **Risk score** | Everything else a tool gives away, adding up to a flag or an automatic pause. |
+| **Watermark with a code** | Screen recording, which no web technology can prevent, becomes traceable to an account. |
 
 When a limit is crossed, vidlock answers 429, logs a warning, sends
 `vidlock.signals.key_abuse` (with `reason`) and calls `ON_KEY_ABUSE`, at most
@@ -327,6 +428,8 @@ manage.py vidlock_seal courses.Lesson --state failed --limit 50
 manage.py vidlock_seal --queue                # hand them to VIDLOCK['ENQUEUE_SEAL'] instead
 manage.py vidlock_rewrap                      # re-encrypt keys under the first KEY_ENCRYPTION_KEYS
 manage.py vidlock_export courses.Lesson 42 lesson-42.mp4   # decrypt back to a playable MP4
+manage.py vidlock_trace K7QMZ4                # which account a watermark code belongs to
+manage.py vidlock_risk amira --clear          # a viewer's risk score; lift a pause
 ```
 
 **Admin**
@@ -344,11 +447,18 @@ The mixin adds a *Protection* column, a read-only duration and error, and a
 *Seal again* action. The action goes through `ENQUEUE_SEAL` when that is set,
 and seals inline otherwise.
 
-**System checks.** `manage.py check` reports a missing backend, storage or
-ffmpeg, mistyped setting names, and keys still derived from `SECRET_KEY`.
+**System checks.** `manage.py check` reports:
+
+* a missing backend, storage or ffmpeg;
+* mistyped setting names;
+* keys still derived from `SECRET_KEY`;
+* a cache that is not shared between processes. Limits, leases and scores
+  live in the cache, so use Redis, Memcached or the database cache in
+  production.
 
 **Signals.** `vidlock.signals.seal_finished(sender=Model, pk, state, error,
-video_key)` fires after every sealing job; `key_abuse` is described above.
+video_key)` fires after every sealing job. `key_abuse` and `viewer_flagged`
+are described above.
 
 **Rotating the key-encryption key.** Put the new secret first
 (`'KEY_ENCRYPTION_KEYS': [new, old]`), deploy, run `vidlock_rewrap`, and
@@ -373,11 +483,19 @@ recover any video later with `vidlock_export`.
 | `DJANGO_STORAGE` | `'default'` | Alias in `settings.STORAGES` used by `DjangoStorage`. |
 | `FFMPEG_BINARY` / `FFPROBE_BINARY` | `ffmpeg` / beside ffmpeg | |
 | `SEGMENT_SECONDS` | `10` | Each range is one GET on the bucket. `30` means a third of the billed requests and coarser seeking. |
+| `KEY_ROTATION_SECONDS` | `60` | Seconds of video per key. `None`: one key per video. |
+| `KEY_PACE` / `KEY_BURST` | `2.0` / `6` | Keys of a video go out no faster than this multiple of playback speed, after a burst of this many (for seeking). `0` turns pacing off. |
 | `KEEP_SOURCE` | `False` | Keep the uploaded MP4 after sealing. |
 | `TOKEN_TTL` | `600` | Seconds a token and a signed media URL live. |
 | `KEY_FETCHES_PER_HOUR` | `20` | Depth limit: key fetches per viewer, video and hour. |
 | `KEY_VIDEOS_PER_HOUR` | `30` | Breadth limit: different videos keyed per viewer and hour. `None` turns it off. |
 | `STRICT_FETCH_METADATA` | `False` | Also refuse web key requests that carry no `Sec-Fetch-*` headers. Test with Safari before you enable it. |
+| `REQUIRE_WRAPPED_KEY` | `False` | Refuse web keys outside the page's key exchange: download tools, and iPhones older than iOS 17.1. |
+| `MAX_STREAMS` | `None` | Devices that may play at once per viewer; `1` stops account sharing. |
+| `STREAM_TIMEOUT` / `HEARTBEAT_SECONDS` | `90` / `30` | A stream lapses after this long without a heartbeat / how often the player sends one. |
+| `RISK_THRESHOLD` / `RISK_SUSPEND_SECONDS` / `RISK_WEIGHTS` | `10` / `0` / `{}` | The daily score that flags a viewer, how long a flagged viewer is paused (`0`: flag only), and weight overrides. |
+| `MAX_NETWORKS_PER_DAY` | `6` | Networks (/24, /48) a viewer may use in a day before each new one adds to the score. |
+| `WATERMARK_CODE` | `True` | Add the traceable code (and time) to the watermark. |
 | `ON_KEY_ABUSE` | — | Dotted path to `fn(request, user, video)`, called once a day per viewer past a limit. |
 | `KEY_ENCRYPTION_KEYS` | from `SECRET_KEY` | Secrets that encrypt the stored video keys; the first one encrypts. |
 | `ENQUEUE_SEAL` | — | Dotted path to `fn(model, pk, video_key)` that queues sealing; used by the admin and `vidlock_seal --queue`. |
@@ -393,7 +511,23 @@ Portuguese, German and Turkish, following Django's active language; the
 player follows `<html lang>`. Corrections and new languages are welcome:
 they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
-## Upgrading from 0.1
+## Upgrading
+
+**From 0.2 to 0.3**
+
+* `cryptography` is now a dependency (for the key exchange and rotation).
+* Videos sealed before 0.3 have one key and keep playing as they are. To give
+  them rotating keys, re-seal them from their source: keep the MP4 around
+  (`KEEP_SOURCE`) or recover it with `vidlock_export`.
+* The player sends a heartbeat to the new `heartbeat` URL in `vidlock.urls`,
+  which comes with the same `include()`.
+* Use a shared cache (Redis, Memcached or the database cache) if you run more
+  than one process. The new check `vidlock.W007` says so.
+* The player needs WebCrypto for the key exchange: serve the site over HTTPS
+  (or `localhost`). Over plain HTTP it falls back to raw keys, which count
+  towards the risk score.
+
+**From 0.1**
 
 * Keys sealed by 0.1 are stored raw. They keep working; run
   `manage.py vidlock_rewrap` once to encrypt them.
@@ -421,7 +555,15 @@ Upload at a sensible bitrate (for example 720p at 1.5–2.5 Mbps for lectures),
 or encode your renditions before uploading.
 
 **Can a determined user still get the video?** Yes; see *What it is not*.
-The watermark is what makes that expensive for them.
+The rotation, pace and risk score make it slow and noisy, one screen at a
+time makes sharing the account pointless, and the watermark code makes a
+leak point back to them.
+
+**What about real DRM?** Pairing vidlock with Widevine/FairPlay via Shaka
+Packager (CMAF, `cbcs`, still no re-encode) and a licence service such as
+EZDRM or PallyCon is on the roadmap as an optional backend. It is the only
+thing that also stops extensions from copying what the player hands to
+MediaSource.
 
 ## Contributing
 
@@ -453,20 +595,32 @@ MIT © Nader Yasser. The bundled hls.js is © Dailymotion, Apache-2.0 (see
 - **برامج التحميل مابتاخدش المفتاح:** زي yt-dlp وN_m3u8DL-RE، لأن التوكن
   مربوط بجلسة الطالب نفسها. واللي بيطلب مفاتيح كتير في الساعة بيترفض، سواء
   كرر نفس الفيديو أو حاول يسحب كورس كامل درس درس، وإنت بيوصلك تنبيه.
-- **علامة مائية متحركة** باسم الطالب أو رقمه فوق الفيديو، وبتفضل ظاهرة حتى
-  في وضع ملء الشاشة، فأي تسجيل شاشة يبان مين اللي عمله.
+- **كل دقيقة من الفيديو ليها مفتاح،** والمفاتيح بتتسلّم بسرعة المشاهدة بس
+  (بحد أقصى ضعف السرعة)، فاللي عايز يسحب درس كامل هيستنى طول الدرس تقريبًا،
+  والمفتاح المنسوخ بيفتح دقيقة واحدة.
+- **المفتاح عمره ما بيعدّي على الشبكة مكشوف:** بيتشفّر لصفحة الطالب نفسها
+  (ECDH)، فنسخه من DevTools وإدخاله في برنامج تحميل مابيجيبش حاجة.
+- **شاشة واحدة بس:** مع `MAX_STREAMS = 1`، لو الحساب اتفتح على جهاز تاني،
+  الجهاز الأول بيقف برسالة. كده مشاركة الحساب مابقاش ليها لازمة.
+- **درجة شك لكل طالب:** مفاتيح اتطلبت ومااتشغلتش، وإضافات «حفظ الفيديو»،
+  وشبكات كتير في يوم واحد، وتبديل أجهزة… لما الدرجة توصل للحد بيوصلك تنبيه،
+  وممكن الحساب يتوقف أوتوماتيك.
+- **علامة مائية متحركة** باسم الطالب، ومعاها كود من ٦ حروف والوقت، ونسخة
+  باهتة مالية الشاشة كلها، حتى في وضع ملء الشاشة. أمر `vidlock_trace` بيحوّل
+  الكود اللي ظاهر في أي فيديو متسرّب للحساب اللي سرّبه.
 - **بتشتغل على كل حاجة:** كروم وفايرفوكس بـhls.js (متضمّن جوه المكتبة)،
   وسفاري والآيفون، والأبلكيشن بـExoPlayer أو AVPlayer.
 - **أي تخزين:** Cloudflare R2 وS3 وMinIO وB2، أو Google Cloud وAzure عن طريق
   django-storages.
 - **أدوات تشغيل:** أوامر `vidlock_seal` و`vidlock_status` و`vidlock_rewrap`
-  و`vidlock_export`، وإجراء «تشفير مرة أخرى» في لوحة الأدمن، وفحوصات
+  و`vidlock_export` و`vidlock_trace` و`vidlock_risk`، وإجراء «تشفير مرة أخرى» في لوحة الأدمن، وفحوصات
   `manage.py check`.
 - **رسائل بالعربي** في السيرفر والأدمن والمشغّل، ومعاها الإنجليزي والفرنساوي
   والإسباني والبرتغالي والألماني والتركي.
 
-**مش DRM:** حد فاهم ومصمّم يقدر يوصل للمفتاح في الآخر. الهدف إن الملف المتحمّل
-مايشتغلش، وإن البرامج السهلة تفشل، وإن تسجيل الشاشة يبان مين وراه.
+**مش DRM:** حد فاهم ومصمّم يقدر في الآخر يوصل للفيديو. الهدف إن الملف المتحمّل
+مايشتغلش، وإن البرامج السهلة تفشل، وإن السحب الكامل يبقى بطيء ومكشوف، وإن
+مشاركة الحساب ماتنفعش، وإن أي تسريب يبان مين وراه.
 
 **مهم:** بعد التشفير، المفتاح موجود في الداتابيز بس، فخلّي عندك نسخة احتياطية
 منها. وحط `KEY_ENCRYPTION_KEYS` بسر مستقل عن `SECRET_KEY`.

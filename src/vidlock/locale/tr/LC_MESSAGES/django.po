@@ -51,11 +51,17 @@ msgstr "Seçilen videolar arasında mühürlenecek bir şey yok."
 msgid "VidLock"
 msgstr "VidLock"
 
-msgid "Forbidden"
-msgstr "Yasak"
-
 msgid "This link has expired. Reload the page."
 msgstr "Bu bağlantının süresi doldu. Sayfayı yenileyin."
+
+msgid "Playback is paused on this account. Please contact support."
+msgstr "Bu hesapta oynatma duraklatıldı. Lütfen destekle iletişime geçin."
+
+msgid "This account is watching on another device."
+msgstr "Bu hesap başka bir cihazda izliyor."
+
+msgid "Forbidden"
+msgstr "Yasak"
 
 msgid "Too many requests."
 msgstr "Çok fazla istek."

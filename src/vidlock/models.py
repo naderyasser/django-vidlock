@@ -11,7 +11,14 @@ from __future__ import annotations
 from django.db import models
 
 from vidlock import keys
-from vidlock.playlist import duration
+from vidlock.playlist import duration, key_count
+
+
+def content_key(keys_blob: bytes, index: int) -> bytes:
+    """Key ``index`` out of a video's concatenated 16-byte keys."""
+    if index < 0 or (index + 1) * 16 > len(keys_blob):
+        raise IndexError(f'no key {index}')
+    return bytes(keys_blob[index * 16 : index * 16 + 16])
 
 
 class SealedVideoMixin(models.Model):
@@ -45,10 +52,16 @@ class SealedVideoMixin(models.Model):
         """Seconds of video in the sealed playlist; 0.0 before sealing."""
         return duration(self.sealed_playlist) if self.sealed_playlist else 0.0
 
-    def content_key(self) -> bytes:
-        """The 16-byte AES key, decrypted. Raises ``vidlock.keys.KeyUnwrapError``
-        when no configured secret opens it."""
-        return keys.unwrap(self.sealed_key)
+    def content_key(self, index: int = 0) -> bytes:
+        """The 16-byte AES key for rotation period ``index``, decrypted. Raises
+        ``vidlock.keys.KeyUnwrapError`` when no configured secret opens it and
+        ``IndexError`` past the last key."""
+        return content_key(keys.unwrap(self.sealed_key), index)
+
+    @property
+    def key_count(self) -> int:
+        """How many keys the sealed video uses (one per rotation period)."""
+        return key_count(self.sealed_playlist) if self.sealed_playlist else 0
 
     def forget_seal(self) -> None:
         """Call when the video is replaced or removed — the old seal belongs to

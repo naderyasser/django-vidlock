@@ -34,7 +34,7 @@ CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'
 ROOT_URLCONF = 'tests.testapp.urls'
 STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-SILENCED_SYSTEM_CHECKS = ['vidlock.W006']
+SILENCED_SYSTEM_CHECKS = ['vidlock.W006', 'vidlock.W007']
 VIDLOCK = {
     'BACKEND': 'tests.testapp.backend.LessonBackend',
     'STORAGE': 'tests.testapp.storage.MemoryStorage',

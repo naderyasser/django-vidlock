@@ -33,6 +33,7 @@ class Claims(NamedTuple):
     channel: str
     account: str  # fingerprint of the password hash; '' when not bound
     session: str  # fingerprint of the session key (web only); '' when not bound
+    lease: str = ''  # the device's stream lease (vidlock.streams); '' when none
 
 
 def _fingerprint(kind: str, value: str | None) -> str:
@@ -51,19 +52,19 @@ def session_fingerprint(request) -> str:
     return _fingerprint('session', getattr(session, 'session_key', None))
 
 
-def sign(video_id, user_id, channel: str = WEB, account: str = '', session: str = '') -> str:
+def sign(video_id, user_id, channel: str = WEB, account: str = '', session: str = '', lease: str = '') -> str:
     if channel not in (WEB, APP):
         raise ValueError(f'unknown channel {channel!r}')
-    return TimestampSigner(salt=_SALT).sign(f'{video_id}|{user_id}|{channel}|{account}|{session}')
+    return TimestampSigner(salt=_SALT).sign(f'{video_id}|{user_id}|{channel}|{account}|{session}|{lease}')
 
 
-def sign_for(request, video_id, channel: str | None = None) -> str:
-    """A token for the viewer making ``request``, bound to their account and,
-    on the web channel, to this session."""
+def sign_for(request, video_id, channel: str | None = None, lease: str = '') -> str:
+    """A token for the viewer making ``request``, bound to their account, to
+    the device's stream ``lease`` and, on the web channel, to this session."""
     channel = channel or channel_for(request)
     user = request.user
     session = session_fingerprint(request) if channel == WEB else ''
-    return sign(video_id, user.pk, channel, account_fingerprint(user), session)
+    return sign(video_id, user.pk, channel, account_fingerprint(user), session, lease)
 
 
 def claims(token: str | None, video_id, max_age: int | None = None) -> Claims | None:
@@ -73,10 +74,10 @@ def claims(token: str | None, video_id, max_age: int | None = None) -> Claims | 
         value = TimestampSigner(salt=_SALT).unsign(token or '', max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None
-    video, user, channel, account, session = [*value.split('|'), '', '', '', ''][:5]
+    video, user, channel, account, session, lease = [*value.split('|'), '', '', '', '', ''][:6]
     if video != str(video_id) or not user or channel not in (WEB, APP):
         return None
-    return Claims(user, channel, account, session)
+    return Claims(user, channel, account, session, lease)
 
 
 def verify(token: str | None, video_id, max_age: int | None = None):

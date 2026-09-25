@@ -38,3 +38,9 @@ class SealedBackend:
     def watermark(self, user, video) -> str | None:
         """Text drawn over the video for this viewer, or None for none."""
         return None
+
+    def client_ip(self, request) -> str:
+        """The viewer's address, for the risk score's network count. Behind a
+        proxy or CDN, return the header it sets (e.g. CF-Connecting-IP) —
+        only if that proxy is the only way in."""
+        return request.META.get('REMOTE_ADDR', '')

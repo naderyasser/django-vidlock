@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.3.0 — 2026-09-25
+
+### Protection
+
+* **Key rotation.** Every `KEY_ROTATION_SECONDS` (60) of video gets its own
+  key and IV, still inside one `.ts` and still without re-encoding: ffmpeg
+  remuxes, and vidlock encrypts each byte range.
+* **Key pace.** A video's keys go out no faster than `KEY_PACE` (2×) playback
+  speed per viewer, after a `KEY_BURST` for seeking. A new token does not
+  refill the bucket.
+* **Key exchange.** The bundled player makes an ECDH P-256 key pair per page,
+  and each key comes back sealed to it (HKDF-SHA256, AES-GCM), so a key
+  copied from DevTools is useless. `REQUIRE_WRAPPED_KEY` refuses raw keys to
+  web tokens.
+* **One screen at a time.** `MAX_STREAMS` limits the devices a viewer can
+  play on at once. A new device takes the stream over and the old one stops
+  with a message; the player's own renewals never take a stream back.
+* **Risk score.** Refused keys, keys that are never played, raw keys,
+  takeovers, many networks and tampered MediaSource functions add up per
+  viewer and day. Past `RISK_THRESHOLD` vidlock sends `viewer_flagged` and
+  can pause the account (`RISK_SUSPEND_SECONDS`).
+* **Watermark.** Adds a six-letter code per viewer and day plus the time,
+  and a faint full-frame copy that cropping cannot remove. It resists being
+  hidden or faded from the console, and the player refuses iPhone's native
+  fullscreen, where nothing can be drawn over the video.
+  `manage.py vidlock_trace` turns a code back into the account.
+
+### Everything else
+
+* Heartbeat endpoint (`vidlock:heartbeat`); `playback_info` returns
+  `heartbeat_url`, `heartbeat_interval` and `key_exchange`.
+* `manage.py vidlock_risk` to see a score and lift a pause;
+  `SealedBackend.client_ip()`; the player's `onEvicted` option.
+* Depth is now counted per key and breadth per video. Rotation does not trip
+  either limit.
+* New check `vidlock.W007` for a cache that is not shared between processes.
+* `cryptography` is a dependency.
+* Videos sealed by 0.2 keep one key and keep playing.
+
 ## 0.2.0 — 2026-09-25
 
 ### Security

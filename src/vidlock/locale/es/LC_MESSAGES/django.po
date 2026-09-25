@@ -53,11 +53,17 @@ msgstr "No hay nada que sellar entre los vídeos seleccionados."
 msgid "VidLock"
 msgstr "VidLock"
 
-msgid "Forbidden"
-msgstr "Prohibido"
-
 msgid "This link has expired. Reload the page."
 msgstr "Este enlace ha caducado. Recarga la página."
+
+msgid "Playback is paused on this account. Please contact support."
+msgstr "La reproducción está pausada en esta cuenta. Contacta con soporte."
+
+msgid "This account is watching on another device."
+msgstr "Esta cuenta está viendo en otro dispositivo."
+
+msgid "Forbidden"
+msgstr "Prohibido"
 
 msgid "Too many requests."
 msgstr "Demasiadas solicitudes."

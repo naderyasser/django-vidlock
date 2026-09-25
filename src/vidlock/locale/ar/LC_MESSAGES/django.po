@@ -56,11 +56,17 @@ msgstr "لا يوجد ما يُشفَّر بين الفيديوهات المخت
 msgid "VidLock"
 msgstr "VidLock"
 
-msgid "Forbidden"
-msgstr "غير مسموح"
-
 msgid "This link has expired. Reload the page."
 msgstr "انتهت صلاحية هذا الرابط. أعد تحميل الصفحة."
+
+msgid "Playback is paused on this account. Please contact support."
+msgstr "تم إيقاف التشغيل مؤقتًا على هذا الحساب. يرجى التواصل مع الدعم."
+
+msgid "This account is watching on another device."
+msgstr "هذا الحساب يشاهد الآن على جهاز آخر."
+
+msgid "Forbidden"
+msgstr "غير مسموح"
 
 msgid "Too many requests."
 msgstr "طلبات كثيرة جدًا."

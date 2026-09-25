@@ -51,11 +51,17 @@ msgstr "Rien à sceller parmi les vidéos sélectionnées."
 msgid "VidLock"
 msgstr "VidLock"
 
-msgid "Forbidden"
-msgstr "Interdit"
-
 msgid "This link has expired. Reload the page."
 msgstr "Ce lien a expiré. Rechargez la page."
+
+msgid "Playback is paused on this account. Please contact support."
+msgstr "La lecture est suspendue sur ce compte. Contactez le support."
+
+msgid "This account is watching on another device."
+msgstr "Ce compte regarde sur un autre appareil."
+
+msgid "Forbidden"
+msgstr "Interdit"
 
 msgid "Too many requests."
 msgstr "Trop de requêtes."

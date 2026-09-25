@@ -70,6 +70,19 @@ def check_settings(app_configs, **kwargs):
             )
         )
 
+    backend = str(getattr(settings, 'CACHES', {}).get('default', {}).get('BACKEND', ''))
+    if backend.endswith(('LocMemCache', 'DummyCache')):
+        problems.append(
+            Warning(
+                f'The default cache ({backend.rsplit(".", 1)[-1]}) is not shared between processes.',
+                hint=(
+                    'Key limits, stream leases and risk scores live in the cache; with several '
+                    'workers each keeps its own. Use Redis, Memcached or the database cache.'
+                ),
+                id='vidlock.W007',
+            )
+        )
+
     if not conf.get('KEY_ENCRYPTION_KEYS'):
         problems.append(
             Warning(

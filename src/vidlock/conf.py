@@ -34,6 +34,10 @@ DEFAULTS: dict[str, Any] = {
     # One BYTERANGE per this many seconds. Every range is one GET against the
     # bucket; bigger segments mean fewer billed requests and coarser seeking.
     'SEGMENT_SECONDS': 10,
+    # Every this many seconds of video gets its own key, and keys are handed
+    # out no faster than a viewer could watch (KEY_PACE). A copied key then
+    # opens a minute of a lesson, not the lesson. None: one key per video.
+    'KEY_ROTATION_SECONDS': 60,
     # Keep the uploaded MP4 after sealing. Off by default: the point is that
     # no playable copy sits in the bucket. Turn it on if you want a way back
     # that does not depend on your database backups.
@@ -47,11 +51,43 @@ DEFAULTS: dict[str, Any] = {
     # the per-video limit never sees it. Past this many *different* videos
     # keyed in an hour by one viewer, it is a harvest. None disables it.
     'KEY_VIDEOS_PER_HOUR': 30,
+    # Pace of a rotated video's keys: a bucket of KEY_BURST keys per viewer and
+    # video, refilled at KEY_PACE times playback speed. A viewer who seeks a
+    # lot spends the burst; a tool that wants every key waits. 0 turns it off.
+    'KEY_PACE': 2.0,
+    'KEY_BURST': 6,
     # Refuse a web token's key to a request that carries no Fetch Metadata
     # (Sec-Fetch-*) headers. Every current browser sends them, download tools
     # do not unless told to. Off by default so an old browser keeps playing;
     # a request that says it is cross-site is refused either way.
     'STRICT_FETCH_METADATA': False,
+    # Deliver web keys only through the bundled player's key exchange (ECDH:
+    # the key crosses the network wrapped for that page alone, so copying it
+    # from DevTools into a downloader gets nothing). Every browser with
+    # MediaSource (all desktops, Android, iOS 17.1+) uses it anyway; turning
+    # this on refuses the rest, i.e. download tools and iPhones older than
+    # iOS 17.1. Off: those raw fetches only count towards the risk score.
+    'REQUIRE_WRAPPED_KEY': False,
+    # Streams one viewer may play at once, on different devices (browser
+    # sessions or app logins). A new device past the limit takes over the
+    # oldest one, which stops with a message. None: no limit.
+    'MAX_STREAMS': None,
+    # A stream whose player has not sent a heartbeat for this long lapses.
+    'STREAM_TIMEOUT': 90,
+    # How often the bundled player sends its heartbeat.
+    'HEARTBEAT_SECONDS': 30,
+    # Suspicion score (see vidlock.risk): event weights, the daily score that
+    # flags a viewer, and how long a flagged viewer is refused keys (0: flag
+    # only; listen to vidlock.signals.viewer_flagged).
+    'RISK_WEIGHTS': {},
+    'RISK_THRESHOLD': 10,
+    'RISK_SUSPEND_SECONDS': 0,
+    # Networks (/24, /48) one viewer may come from in a day before each new
+    # one counts towards the risk score. None: not counted.
+    'MAX_NETWORKS_PER_DAY': 6,
+    # Watermark: add a short code that `manage.py vidlock_trace` turns back
+    # into the viewer, plus the date and time, to the text drawn over the video.
+    'WATERMARK_CODE': True,
     # Optional dotted path: called as fn(request, user, video) the first time a
     # viewer crosses a key limit in a day. Alert, log, ban — yours. The
     # vidlock.signals.key_abuse signal fires as well, with the reason.
