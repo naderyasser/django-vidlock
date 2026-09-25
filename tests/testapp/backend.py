@@ -1,6 +1,5 @@
-from vidlock.backend import SealedBackend
-
 from tests.testapp.models import Lesson
+from vidlock.backend import SealedBackend
 
 REPORTS = []
 

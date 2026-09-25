@@ -27,7 +27,7 @@ def key_fetch_allowed(user_id, video_id, namespace=''):
     try:
         cache.add(key, 0, 3600)
         return cache.incr(key) <= limit
-    except Exception:  # noqa: BLE001
+    except Exception:
         return True
 
 
@@ -35,5 +35,5 @@ def first_report_today(user_id, video_id, namespace=''):
     """True once per viewer, video and day — so an alert is not a flood."""
     try:
         return cache.add(f'{_PREFIX}:reported:{namespace}:{user_id}:{video_id}', 1, 24 * 3600)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return False

@@ -75,7 +75,7 @@ class S3Storage(Storage):
         try:
             self.client.delete_object(Bucket=self.bucket, Key=key)
             return True
-        except Exception:  # noqa: BLE001
+        except Exception:
             return False
 
 

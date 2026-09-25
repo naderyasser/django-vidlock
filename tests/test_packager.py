@@ -15,7 +15,8 @@ def test_one_encrypted_file_whose_ranges_decrypt_on_their_own(sample, tmp_path):
     assert KEY_PLACEHOLDER in playlist and MEDIA_PLACEHOLDER in playlist
     assert '#EXT-X-ENDLIST' in playlist
     assert segment_count(playlist) == 3
-    data = open(ts, 'rb').read()
+    with open(ts, 'rb') as fh:
+        data = fh.read()
     assert data[0] != 0x47, 'the stored file must not be a playable MPEG-TS'
 
     # The second range alone: a player seeking there needs nothing before it.

@@ -32,7 +32,7 @@ def verify(token, video_id, max_age=None):
         value = TimestampSigner(salt=_SALT).unsign(token or '', max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None, None
-    video, user, channel = (value.split('|') + ['', ''])[:3]
+    video, user, channel = [*value.split('|'), '', ''][:3]
     if video != str(video_id) or not user or channel not in (WEB, APP):
         return None, None
     return user, channel

@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install ruff black
+      - run: pip install ruff==0.15.8 black==24.8.0
       - run: ruff check . && black --check .
 
   test:

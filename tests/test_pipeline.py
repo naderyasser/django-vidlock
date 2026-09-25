@@ -3,9 +3,9 @@ from unittest import mock
 
 import pytest
 
-from vidlock.pipeline import seal, wants
 from tests.testapp import storage
 from tests.testapp.models import Lesson
+from vidlock.pipeline import seal, wants
 
 pytestmark = pytest.mark.django_db
 

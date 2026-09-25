@@ -50,6 +50,7 @@ def probe(path):
         raise PackagingError('ffmpeg is not installed')
     run = subprocess.run(
         [binary, '-hide_banner', '-nostdin', '-i', path],
+        check=False,  # ffmpeg -i with no output always exits 1; stderr is the answer
         capture_output=True,
         text=True,
         timeout=120,
@@ -117,6 +118,7 @@ def package(source, workdir):
             key_info,
             playlist_path,
         ],
+        check=False,  # the exit code is turned into a PackagingError with ffmpeg's own words
         capture_output=True,
         text=True,
         timeout=TIMEOUT_SECONDS,

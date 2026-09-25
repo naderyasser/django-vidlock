@@ -6,10 +6,10 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
-from vidlock import tokens
-from vidlock.views import playback_info
 from tests.testapp.backend import REPORTS
 from tests.testapp.models import Lesson
+from vidlock import tokens
+from vidlock.views import playback_info
 
 pytestmark = pytest.mark.django_db
 
@@ -154,7 +154,7 @@ def test_a_burst_of_key_fetches_is_refused_and_reported_once(client, lesson, peo
     settings.VIDLOCK = {**settings.VIDLOCK, 'KEY_FETCHES_PER_HOUR': 3}
     t = token(lesson, people[0])
     assert [key(client, lesson, t).status_code for _ in range(5)] == [200, 200, 200, 429, 429]
-    assert REPORTS == [(people[0].pk, lesson.pk)]
+    assert [(people[0].pk, lesson.pk)] == REPORTS
 
 
 def test_the_limit_is_per_video(client, lesson, people, settings):

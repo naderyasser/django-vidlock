@@ -45,6 +45,12 @@ pythonpath = [".", "src"]
 line-length = 110
 target-version = "py310"
 
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "SIM", "PLW", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["vidlock", "tests"]
+
 [tool.black]
 line-length = 110
 skip-string-normalization = true

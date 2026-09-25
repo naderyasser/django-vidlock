@@ -74,7 +74,7 @@ def seal(model, pk, source_key, storage=None, delete_source=True):
             ts_path, playlist, key = packager.package(source, work)
             size = os.path.getsize(ts_path)
             storage.upload(ts_path, target, TS_CONTENT_TYPE)
-    except Exception as exc:  # noqa: BLE001 — the MP4 keeps playing whatever went wrong
+    except Exception as exc:
         logger.exception('sealing %s %s failed', model.__name__, pk)
         storage.delete(target)
         return _mark(model, pk, source_key, model.STATE_FAILED, f'{type(exc).__name__}: {exc}')

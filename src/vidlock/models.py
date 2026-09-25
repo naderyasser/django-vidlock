@@ -20,12 +20,10 @@ class SealedVideoMixin(models.Model):
     #: Object key in storage: the uploaded MP4 until sealing, the .ts after.
     video_key = models.CharField(max_length=500, blank=True, default='', db_index=True)
     video_size = models.BigIntegerField(default=0)
-    # db_default so the columns can be added before the code that writes them
-    # is deployed: an old process that omits them from INSERT is not refused.
-    sealed_state = models.CharField(max_length=10, blank=True, default='', db_default='')
-    sealed_playlist = models.TextField(blank=True, default='', db_default='')
+    sealed_state = models.CharField(max_length=10, blank=True, default='')
+    sealed_playlist = models.TextField(blank=True, default='')
     sealed_key = models.BinaryField(null=True, blank=True, editable=False)
-    sealed_error = models.CharField(max_length=300, blank=True, default='', db_default='')
+    sealed_error = models.CharField(max_length=300, blank=True, default='')
 
     class Meta:
         abstract = True
