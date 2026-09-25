@@ -43,7 +43,9 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: publish
+    # Independent of PyPI: the release page appears even before Trusted
+    # Publishing is set up.
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -53,6 +55,11 @@ jobs:
         with:
           name: dist
           path: dist/
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md."
+      - name: this version's CHANGELOG section
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '/^## /{p = index($0, "## " v " ") == 1; next} p' CHANGELOG.md > notes.md
+          test -s notes.md
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "django-vidlock $GITHUB_REF_NAME" --notes-file notes.md
         env:
           GH_TOKEN: ${{ github.token }}

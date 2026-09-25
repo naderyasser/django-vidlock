@@ -2,7 +2,8 @@
 
 ## 0.2.0 — 2026-09-25
 
-Security
+### Security
+
 * Video keys are encrypted at rest under `KEY_ENCRYPTION_KEYS` (derived from
   `SECRET_KEY` when unset), with rotation and `manage.py vidlock_rewrap`.
   Keys stored raw by 0.1 still play.
@@ -14,7 +15,8 @@ Security
   refused; `STRICT_FETCH_METADATA` also refuses requests without the headers.
 * Key and playlist responses send `nosniff` and `no-referrer`.
 
-Playback
+### Playback
+
 * hls.js 1.7.3 ships inside the package; `{% vidlock_player %}` wires it up.
   `HLS_JS_URL` (unused in 0.1) now works, with `HLS_JS_INTEGRITY` for SRI.
 * Safari/iOS native HLS no longer reloads every nine minutes: the playlist's
@@ -25,14 +27,16 @@ Playback
   Turkish; `hlsConfig` and `onHls` options; `destroy()` now cleans up fully;
   renewal pauses while a paused tab is hidden.
 
-Sealing
+### Sealing
+
 * Probing uses `ffprobe` JSON (falls back to `ffmpeg -i`) and refuses H.264
   that browsers cannot decode (10-bit, 4:2:2, 4:4:4).
 * `KEEP_SOURCE` keeps the uploaded MP4; `vidlock_export` decrypts a sealed
   video back to a playable MP4.
 * `vidlock.signals.seal_finished` after every job.
 
-Operations
+### Operations
+
 * Commands: `vidlock_seal`, `vidlock_status`, `vidlock_rewrap`, `vidlock_export`.
 * `vidlock.admin.SealedVideoAdminMixin` with a status column and a "Seal again" action.
 * System checks for missing or mistyped settings, ffmpeg and key secrets.
@@ -40,7 +44,8 @@ Operations
 * `sealed_duration` on the model and `duration` in `playback_info`.
 * Server and admin strings translated (ar, fr, es, pt, de, tr); type hints and `py.typed`.
 
-Project
+### Project
+
 * Tested on Python 3.10–3.14 with Django 4.2, 5.1, 5.2 and 6.0, with coverage,
   an end-to-end browser test (hls.js fetches the key and decrypts), and a
   release workflow for PyPI Trusted Publishing.
