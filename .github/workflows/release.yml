@@ -1,12 +1,25 @@
 name: Release
 
-# Push a tag like v0.2.0 to publish that version to PyPI. Publishing uses
-# PyPI's Trusted Publishing: add this repository and workflow as a trusted
-# publisher on pypi.org once, and no API token is needed.
+# Two ways to release the version in src/vidlock/__init__.py:
+#
+# * push a tag like v0.2.0; or
+# * run this workflow by hand (Actions → Release → Run workflow) on main: it
+#   creates the tag and the GitHub release itself.
+#
+# Publishing to PyPI uses Trusted Publishing: add this repository, this
+# workflow (release.yml) and the environment "pypi" as a trusted publisher on
+# pypi.org once, and no API token is needed. A tag push always publishes; a
+# manual run publishes only when "pypi" is ticked.
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      pypi:
+        description: Also publish to PyPI (needs Trusted Publishing set up)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -14,15 +27,19 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: the tag matches the package version
+      - id: version
+        name: the version, and the tag it goes out under
         run: |
           version=$(python -c "import re;print(re.search(r\"__version__ = '(.+)'\", open('src/vidlock/__init__.py').read())[1])")
-          test "v$version" = "$GITHUB_REF_NAME"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then test "v$version" = "$GITHUB_REF_NAME"; fi
       - run: pip install build twine && python -m build && twine check --strict dist/*
       - uses: actions/upload-artifact@v4
         with:
@@ -31,6 +48,7 @@ jobs:
 
   publish:
     needs: build
+    if: github.event_name == 'push' || inputs.pypi
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -56,10 +74,19 @@ jobs:
           name: dist
           path: dist/
       - name: this version's CHANGELOG section
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${TAG#v}"
           awk -v v="$version" '/^## /{p = index($0, "## " v " ") == 1; next} p' CHANGELOG.md > notes.md
           test -s notes.md
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "django-vidlock $GITHUB_REF_NAME" --notes-file notes.md
+      - name: create the release (and, on a manual run, its tag)
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG is already released"; exit 0
+          fi
+          gh release create "$TAG" dist/* --target "$GITHUB_SHA" \
+            --title "django-vidlock $TAG" --notes-file notes.md --latest
