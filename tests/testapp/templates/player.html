@@ -1,0 +1,25 @@
+{% load vidlock %}<!doctype html>
+<html lang="en">
+<body>
+<video id="player" controls playsinline muted width="320"></video>
+<p id="status"></p>
+{% vidlock_player %}
+<script>
+  window.vidlockTest = {parsed: 0, codecs: [], keys: 0, errors: []};
+  window.player = VidLock.attach(document.getElementById('player'), {
+    endpoint: '/playback/{{ pk }}/',
+    onStatus: (message) => { document.getElementById('status').textContent = message || ''; },
+    onHls: (hls) => {
+      hls.on(Hls.Events.KEY_LOADED, () => { vidlockTest.keys++; });
+      // Fired once hls.js has demuxed a decrypted segment, before any
+      // SourceBuffer exists: the codecs it names came out of the clear TS.
+      hls.on(Hls.Events.BUFFER_CODECS, (e, d) => {
+        vidlockTest.parsed++;
+        Object.values(d || {}).forEach((t) => vidlockTest.codecs.push(t.codec));
+      });
+      hls.on(Hls.Events.ERROR, (e, d) => { vidlockTest.errors.push(d.details); });
+    },
+  });
+</script>
+</body>
+</html>

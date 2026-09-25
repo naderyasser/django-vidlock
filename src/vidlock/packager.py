@@ -12,11 +12,15 @@ written into the playlist), so a player can seek anywhere, and the whole
 video is one object in storage: one upload, one signed URL, one delete.
 """
 
+from __future__ import annotations
+
+import json
 import os
 import re
 import secrets
 import shutil
 import subprocess
+from dataclasses import dataclass
 
 from vidlock import conf
 from vidlock.playlist import KEY_PLACEHOLDER, MEDIA_PLACEHOLDER
@@ -24,6 +28,9 @@ from vidlock.playlist import KEY_PLACEHOLDER, MEDIA_PLACEHOLDER
 #: Codecs MPEG-TS carries and every HLS player decodes, with no re-encode.
 VIDEO_CODECS = frozenset({'h264'})
 AUDIO_CODECS = frozenset({'aac', 'mp3'})
+#: 8-bit 4:2:0 — what browsers' and phones' H.264 decoders accept. An H.264
+#: file in 10-bit (High 10) or 4:2:2/4:4:4 plays in VLC and nowhere else.
+PIXEL_FORMATS = frozenset({'yuv420p', 'yuvj420p'})
 #: Containers worth probing. WebM/MKV hold VP8/VP9/AV1 far more often.
 SOURCE_EXTENSIONS = frozenset({'.mp4', '.m4v', '.mov'})
 
@@ -34,17 +41,62 @@ class PackagingError(RuntimeError):
     pass
 
 
-def ffmpeg_binary():
+@dataclass(frozen=True)
+class Probe:
+    """What a source holds, as ffprobe names it; '' when unknown or absent."""
+
+    video: str = ''
+    audio: str = ''
+    pix_fmt: str = ''
+    profile: str = ''
+    duration: float = 0.0
+
+    def __iter__(self):
+        # ``video, audio = probe(path)`` keeps working as it did in 0.1.
+        return iter((self.video, self.audio))
+
+    @property
+    def problem(self) -> str:
+        """Why this source cannot be sealed without a re-encode; '' when it can."""
+        if self.video not in VIDEO_CODECS:
+            return f'{self.video or "?"}/{self.audio or "-"} needs a re-encode to H.264/AAC'
+        if self.audio and self.audio not in AUDIO_CODECS:
+            return f'{self.video}/{self.audio} needs a re-encode to H.264/AAC'
+        if self.pix_fmt and self.pix_fmt not in PIXEL_FORMATS:
+            return f'H.264 in {self.pix_fmt} ({self.profile or "?"}) needs a re-encode to 8-bit 4:2:0'
+        return ''
+
+
+def ffmpeg_binary() -> str | None:
     """Absolute path to ffmpeg, or None when it is not installed."""
     return shutil.which(conf.get('FFMPEG_BINARY') or 'ffmpeg')
 
 
-def available():
+def ffprobe_binary() -> str | None:
+    """Absolute path to ffprobe: the configured one, the one beside ffmpeg,
+    or the one on the PATH."""
+    configured = conf.get('FFPROBE_BINARY')
+    if configured:
+        return shutil.which(configured)
+    ffmpeg = ffmpeg_binary()
+    if ffmpeg:
+        folder, name = os.path.split(ffmpeg)
+        sibling = shutil.which(os.path.join(folder, name.replace('ffmpeg', 'ffprobe')))
+        if sibling and sibling != ffmpeg:
+            return sibling
+    return shutil.which('ffprobe')
+
+
+def available() -> bool:
     return ffmpeg_binary() is not None
 
 
-def probe(path):
-    """(video codec, audio codec) as ffmpeg names them; '' when absent."""
+def probe(path: str) -> Probe:
+    """What ``path`` holds. Uses ffprobe's JSON when ffprobe is installed, and
+    falls back to reading ``ffmpeg -i`` when only ffmpeg is."""
+    ffprobe = ffprobe_binary()
+    if ffprobe:
+        return _probe_json(ffprobe, path)
     binary = ffmpeg_binary()
     if not binary:
         raise PackagingError('ffmpeg is not installed')
@@ -55,13 +107,64 @@ def probe(path):
         text=True,
         timeout=120,
     )
-    video = re.search(r'Stream #\S+.*?: Video: (\w+)', run.stderr)
+    video = re.search(r'Stream #\S+.*?: Video: (\w+)(?: \(([^)]*)\))?[^,]*, (\w+)', run.stderr)
     audio = re.search(r'Stream #\S+.*?: Audio: (\w+)', run.stderr)
-    return (video.group(1) if video else '', audio.group(1) if audio else '')
+    length = re.search(r'Duration: (\d+):(\d+):([\d.]+)', run.stderr)
+    return Probe(
+        video=video.group(1) if video else '',
+        audio=audio.group(1) if audio else '',
+        profile=(video.group(2) or '') if video else '',
+        pix_fmt=video.group(3) if video else '',
+        duration=(
+            (int(length.group(1)) * 60 + int(length.group(2))) * 60 + float(length.group(3))
+            if length
+            else 0.0
+        ),
+    )
 
 
-def can_seal(video_codec, audio_codec):
-    return video_codec in VIDEO_CODECS and (not audio_codec or audio_codec in AUDIO_CODECS)
+def _probe_json(ffprobe: str, path: str) -> Probe:
+    run = subprocess.run(
+        [
+            ffprobe,
+            '-v',
+            'error',
+            '-show_entries',
+            'stream=codec_type,codec_name,profile,pix_fmt:format=duration',
+            '-of',
+            'json',
+            path,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    try:
+        data = json.loads(run.stdout or '{}')
+    except ValueError:
+        data = {}
+    streams = data.get('streams') or []
+    video = next((s for s in streams if s.get('codec_type') == 'video'), {})
+    audio = next((s for s in streams if s.get('codec_type') == 'audio'), {})
+    try:
+        length = float((data.get('format') or {}).get('duration') or 0)
+    except ValueError:
+        length = 0.0
+    return Probe(
+        video=video.get('codec_name', ''),
+        audio=audio.get('codec_name', ''),
+        pix_fmt=video.get('pix_fmt', ''),
+        profile=video.get('profile', ''),
+        duration=length,
+    )
+
+
+def can_seal(video_codec: str | Probe, audio_codec: str = '') -> bool:
+    """Whether a source can be sealed by remuxing alone. Takes a ``Probe``, or
+    the two codec names as in 0.1."""
+    found = video_codec if isinstance(video_codec, Probe) else Probe(video_codec, audio_codec)
+    return not found.problem
 
 
 def _lowest_priority():
@@ -69,7 +172,7 @@ def _lowest_priority():
     os.nice(19)
 
 
-def package(source, workdir):
+def package(source: str, workdir: str) -> tuple[str, str, bytes]:
     """Remux ``source`` into one encrypted .ts inside ``workdir``.
 
     Returns ``(ts_path, playlist, key)``. The playlist carries placeholders
@@ -141,3 +244,54 @@ def package(source, workdir):
     ):
         raise PackagingError('ffmpeg produced an incomplete playlist')
     return ts_path, playlist, key
+
+
+def unpackage(ts_path: str, playlist: str, key: bytes, out_path: str) -> str:
+    """Decrypt a sealed .ts back into a playable MP4 at ``out_path`` (remux, no
+    re-encode). The way back when you need the original: moving to another
+    platform, or a KEK you are about to retire."""
+    binary = ffmpeg_binary()
+    if not binary:
+        raise PackagingError('ffmpeg is not installed')
+    workdir = os.path.dirname(os.path.abspath(out_path)) or '.'
+    key_file = os.path.join(workdir, f'.vidlock-{secrets.token_hex(4)}.key')
+    local = os.path.join(workdir, f'.vidlock-{secrets.token_hex(4)}.m3u8')
+    try:
+        with open(key_file, 'wb') as fh:
+            fh.write(bytes(key))
+        with open(local, 'w') as fh:
+            fh.write(playlist.replace(KEY_PLACEHOLDER, key_file).replace(MEDIA_PLACEHOLDER, ts_path))
+        run = subprocess.run(
+            [
+                binary,
+                '-hide_banner',
+                '-loglevel',
+                'error',
+                '-nostdin',
+                '-y',
+                '-allowed_extensions',
+                'ALL',
+                '-protocol_whitelist',
+                'file,crypto',
+                '-i',
+                local,
+                '-map',
+                '0',
+                '-c',
+                'copy',
+                '-movflags',
+                '+faststart',
+                out_path,
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+        )
+    finally:
+        for path in (key_file, local):
+            if os.path.exists(path):
+                os.remove(path)
+    if run.returncode:
+        raise PackagingError(f'ffmpeg exited {run.returncode}: {run.stderr.strip()[-300:]}')
+    return out_path

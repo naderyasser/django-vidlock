@@ -2,6 +2,8 @@ from tests.testapp.models import Lesson
 from vidlock.backend import SealedBackend
 
 REPORTS = []
+#: The browser test turns the watermark on.
+WATERMARK = []
 
 
 class LessonBackend(SealedBackend):
@@ -10,6 +12,9 @@ class LessonBackend(SealedBackend):
 
     def can_watch(self, user, video):
         return video.students.filter(pk=user.pk).exists()
+
+    def watermark(self, user, video):
+        return user.get_username() if WATERMARK else None
 
 
 def report(request, user, video):

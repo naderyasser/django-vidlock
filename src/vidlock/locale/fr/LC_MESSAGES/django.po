@@ -1,0 +1,61 @@
+# django-vidlock translations.
+# This file is distributed under the same license as the django-vidlock package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-vidlock\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"PO-Revision-Date: 2026-09-25 00:00+0000\n"
+"Last-Translator: django-vidlock contributors\n"
+"Language-Team: fr\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+msgid "Protection"
+msgstr "Protection"
+
+msgid "Sealed"
+msgstr "Scellée"
+
+msgid "Sealing…"
+msgstr "Scellement…"
+
+msgid "Failed"
+msgstr "Échec"
+
+msgid "Not sealable"
+msgstr "Non scellable"
+
+msgid "Not sealed"
+msgstr "Non scellée"
+
+msgid "Duration"
+msgstr "Durée"
+
+msgid "Seal again (unsealed or failed videos)"
+msgstr "Sceller à nouveau (vidéos non scellées ou en échec)"
+
+#, python-format
+msgid "%d video sent for sealing."
+msgid_plural "%d videos sent for sealing."
+msgstr[0] "%d vidéo envoyée pour scellement."
+msgstr[1] "%d vidéos envoyées pour scellement."
+
+msgid "Nothing to seal among the selected videos."
+msgstr "Rien à sceller parmi les vidéos sélectionnées."
+
+msgid "VidLock"
+msgstr "VidLock"
+
+msgid "Forbidden"
+msgstr "Interdit"
+
+msgid "This link has expired. Reload the page."
+msgstr "Ce lien a expiré. Rechargez la page."
+
+msgid "Too many requests."
+msgstr "Trop de requêtes."

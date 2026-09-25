@@ -1,0 +1,66 @@
+# django-vidlock translations.
+# This file is distributed under the same license as the django-vidlock package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-vidlock\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"PO-Revision-Date: 2026-09-25 00:00+0000\n"
+"Last-Translator: django-vidlock contributors\n"
+"Language-Team: ar\n"
+"Language: ar\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
+"&& n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
+
+msgid "Protection"
+msgstr "الحماية"
+
+msgid "Sealed"
+msgstr "مشفّر"
+
+msgid "Sealing…"
+msgstr "جارٍ التشفير…"
+
+msgid "Failed"
+msgstr "فشل"
+
+msgid "Not sealable"
+msgstr "غير قابل للتشفير"
+
+msgid "Not sealed"
+msgstr "غير مشفّر"
+
+msgid "Duration"
+msgstr "المدة"
+
+msgid "Seal again (unsealed or failed videos)"
+msgstr "تشفير مرة أخرى (الفيديوهات غير المشفّرة أو الفاشلة)"
+
+#, python-format
+msgid "%d video sent for sealing."
+msgid_plural "%d videos sent for sealing."
+msgstr[0] "تم إرسال %d فيديو للتشفير."
+msgstr[1] "تم إرسال %d فيديو للتشفير."
+msgstr[2] "تم إرسال %d فيديو للتشفير."
+msgstr[3] "تم إرسال %d فيديوهات للتشفير."
+msgstr[4] "تم إرسال %d فيديو للتشفير."
+msgstr[5] "تم إرسال %d فيديو للتشفير."
+
+msgid "Nothing to seal among the selected videos."
+msgstr "لا يوجد ما يُشفَّر بين الفيديوهات المختارة."
+
+msgid "VidLock"
+msgstr "VidLock"
+
+msgid "Forbidden"
+msgstr "غير مسموح"
+
+msgid "This link has expired. Reload the page."
+msgstr "انتهت صلاحية هذا الرابط. أعد تحميل الصفحة."
+
+msgid "Too many requests."
+msgstr "طلبات كثيرة جدًا."

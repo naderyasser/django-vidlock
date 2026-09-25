@@ -1,14 +1,21 @@
 # django-vidlock
 
-**Lock your course videos.** Encrypted single-file HLS for Django: a video
-downloaded from its link is worth nothing without a key that only an
-authorised viewer receives, for a few minutes.
+[![CI](https://github.com/naderyasser/django-vidlock/actions/workflows/ci.yml/badge.svg)](https://github.com/naderyasser/django-vidlock/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/django-vidlock.svg)](https://pypi.org/project/django-vidlock/)
+[![Python](https://img.shields.io/pypi/pyversions/django-vidlock.svg)](https://pypi.org/project/django-vidlock/)
+[![Django](https://img.shields.io/badge/django-4.2%20%7C%205.x%20%7C%206.0-0C4B33.svg)](https://www.djangoproject.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Built for paid-course platforms on a budget. No DRM licence, no video
-service, no re-encoding: one `ffmpeg -c copy` per upload, one object in your
-bucket, and the player you already know.
+**Protect your course videos without a DRM budget.** vidlock turns every
+upload into encrypted HLS stored as a single file. Someone who downloads that
+file gets nothing playable without its key. The key goes only to a viewer
+you approve, for a few minutes, and download tools are refused.
 
-[العربي تحت ↓](#بالعربي)
+It needs no DRM licence, no video service and no re-encoding. Each upload
+takes one `ffmpeg -c copy` run and ends up as one object in your bucket.
+Viewers watch in hls.js, Safari, iOS, ExoPlayer or AVPlayer.
+
+[العربية ↓](#بالعربي)
 
 ---
 
@@ -16,57 +23,83 @@ bucket, and the player you already know.
 
 A signed MP4 URL stops casual link-sharing, but anyone with a download
 manager catches the URL while it is valid and walks away with a clean,
-playable copy. A watermark drawn over the player does not survive that.
+playable copy. Paid-course platforms lose their catalogue this way.
 
 ## What vidlock does
 
-1. **Seals every upload.** ffmpeg remuxes the MP4 (no re-encode — about a
-   second for a 78 MB lesson, under 50 MB of RAM) into **one** AES-128
-   encrypted MPEG-TS plus a playlist of byte ranges. The sealed file replaces
-   the MP4 in your bucket; the 16-byte key and the playlist live in your
-   database.
-2. **Hands the key only to a viewer you approve.** The playlist and key URLs
-   carry a token bound to one viewer, one video and ten minutes. Your
-   `can_watch()` runs again on every playlist and key request, so a refund
-   closes the door at once.
-3. **Refuses the key to download tools.** A token issued to a browser session
-   opens the key only alongside that viewer's session cookie — a URL pasted
-   into yt-dlp or N_m3u8DL-RE arrives without it. And more than
-   `KEY_FETCHES_PER_HOUR` key requests from one viewer for one video (a
-   player needs about one per page load) are refused, with a hook so you hear
-   about it.
-4. **Plays everywhere.** The bundled script uses hls.js where MediaSource
-   exists and native HLS on Safari/iOS; ExoPlayer and AVPlayer play the same
-   URL in a mobile app. Signed URLs are renewed before they expire without
+1. **Seals every upload.** ffmpeg remuxes the MP4 into **one** AES-128
+   encrypted MPEG-TS and a playlist of byte ranges. It does not re-encode: a
+   78 MB lesson takes about a second and under 50 MB of RAM. The sealed file
+   replaces the MP4 in your bucket. The 16-byte key and the playlist live in
+   your database, and the key is itself encrypted there.
+2. **Hands the key only to a viewer you approve.** Playlist and key URLs carry
+   a token bound to one viewer, one video, one login session and ten minutes.
+   Your `can_watch()` runs again on every playlist and key request, so a
+   refund, a revoked enrolment, a logout or a password change takes effect
+   immediately.
+3. **Refuses the key to download tools.** A browser token opens the key only
+   alongside the same session cookie, on a same-site fetch. That means a URL
+   pasted into yt-dlp or N_m3u8DL-RE is refused. Two limits catch what gets
+   past that:
+   * *depth*: the same video's key fetched over and over;
+   * *breadth*: many different videos' keys in an hour, which is how a whole
+     course gets harvested.
+
+   A signal fires when either limit is crossed, so you hear about it.
+4. **Names the recorder.** A moving watermark with the viewer's name (or
+   phone, or order id) is drawn over the video, in fullscreen too, so a
+   screen recording points back to its source.
+5. **Plays everywhere.** The bundled script uses hls.js wherever MediaSource
+   exists and native HLS on Safari/iOS. Mobile apps hand the same URL to
+   ExoPlayer or AVPlayer. Signed URLs are renewed before they expire without
    reloading the stream.
+
+### How it fits together
+
+```
+upload.mp4 ──► vidlock.pipeline.seal  (your worker: Celery, RQ, Django Tasks…)
+                 ffprobe → ffmpeg -c copy -hls_flags single_file + AES-128
+                 ├── bucket:   <random>.ts          (encrypted, one object)
+                 └── database: playlist + wrapped key
+
+page ──► your playback view ──► playback_info()  {url, key_url, media_url, watermark…}
+player ──► /video/<id>/media.m3u8?t=…   can_watch() ✓  token ✓
+       ──► /video/<id>/key?t=…          can_watch() ✓  token ✓  session ✓  limits ✓
+       ──► bucket (signed Range GETs)   encrypted bytes, decrypted in the browser
+```
 
 ### Why one file
 
-`-hls_flags single_file` writes a single `.ts` and a playlist of
-`#EXT-X-BYTERANGE`s into it, every range decryptable on its own. Compared
-with the usual hundreds of segment files:
+`-hls_flags single_file` writes a single `.ts` plus a playlist of
+`#EXT-X-BYTERANGE`s into it, and each range can be decrypted on its own.
+Compared with the usual hundreds of segment files:
 
-* one upload, one signed URL, one delete — your storage accounting and
+* one upload, one signed URL and one delete, so your storage accounting and
   cleanup code see one key per video, exactly as they did for the MP4;
-* no per-segment URL signing and no playlist full of object names.
+* no per-segment URL signing, and no playlist full of object names.
 
 ### What it is not
 
-**Not DRM.** Anyone holding a valid token and the matching session can, with
-effort, recover the key — it has to reach the browser to play. vidlock
-makes the file on disk useless and the easy tools fail; it does not stop a
-determined engineer. If you need that, you need Widevine/FairPlay and their
-licence fees. Pair vidlock with a visible per-viewer watermark for screen
-recording.
+**It is not DRM.** Anyone with a valid token and the matching session can,
+with effort, recover the key, because it has to reach the browser for the
+video to play. vidlock makes the downloaded file useless, makes the easy
+tools fail, and makes a screen recording traceable. It does not stop a
+determined engineer. If you need that, you need Widevine/FairPlay/PlayReady
+and their licence fees.
 
 ## Requirements
 
-* Python 3.10+, Django 4.2+
-* `ffmpeg` on the worker that seals (any recent static build)
-* An S3-compatible **private** bucket (Cloudflare R2, AWS S3, MinIO, B2) and
-  `pip install django-vidlock[s3]`, or your own storage class
-* Sources in H.264 (+ AAC/MP3). Anything else (HEVC from an iPhone, WebM) is
-  left untouched and marked `skipped` — sealing never re-encodes.
+* Python 3.10+ and Django 4.2, 5.x or 6.0
+* `ffmpeg` and `ffprobe` on the worker that seals (any recent build; the web
+  servers don't need them)
+* A **private** bucket: any S3-compatible service (AWS S3, Cloudflare R2,
+  MinIO, Backblaze B2, Wasabi, DigitalOcean Spaces…) with
+  `pip install django-vidlock[s3]`, or any Django storage backend, such as
+  Google Cloud Storage or Azure through django-storages
+* Sources in H.264 8-bit 4:2:0 with AAC or MP3 audio, which is what nearly
+  every camera, phone export and screen recorder produces. Anything else
+  (HEVC from an iPhone, 10-bit H.264, WebM) is left as uploaded and marked
+  `skipped`, with the reason. Sealing never re-encodes.
 
 ## Quick start
 
@@ -84,11 +117,13 @@ VIDLOCK = {
     'S3_ENDPOINT_URL': 'https://<account>.r2.cloudflarestorage.com',
     'S3_ACCESS_KEY_ID': env('R2_KEY'),
     'S3_SECRET_ACCESS_KEY': env('R2_SECRET'),
+    # A secret of its own for the video keys (see "Keys at rest").
+    'KEY_ENCRYPTION_KEYS': [env('VIDLOCK_KEK')],
 }
 ```
 
 ```python
-# models.py — your model gains video_key, sealed_state, sealed_playlist, sealed_key…
+# models.py: your model gains video_key, sealed_state, sealed_playlist, sealed_key…
 from vidlock.models import SealedVideoMixin
 
 class Lesson(SealedVideoMixin):
@@ -96,7 +131,7 @@ class Lesson(SealedVideoMixin):
 ```
 
 ```python
-# courses/video.py — the two questions only your project can answer
+# courses/video.py: the questions only your project can answer
 from vidlock.backend import SealedBackend
 
 class LessonBackend(SealedBackend):
@@ -105,6 +140,9 @@ class LessonBackend(SealedBackend):
 
     def can_watch(self, user, video):
         return video.course.enrolments.filter(user=user, active=True).exists()
+
+    def watermark(self, user, video):          # optional
+        return user.email
 ```
 
 ```python
@@ -112,8 +150,12 @@ class LessonBackend(SealedBackend):
 path('video/', include('vidlock.urls')),
 ```
 
-**After an upload lands in the bucket**, record the key and seal it in the
-background:
+Then run `python manage.py makemigrations && python manage.py migrate`, and
+`python manage.py check` to see whether anything is missing.
+
+### After an upload lands in the bucket
+
+Record the key, then seal it in the background:
 
 ```python
 from django.db import transaction
@@ -125,18 +167,37 @@ lesson.sealed_state = Lesson.STATE_PENDING if wants(uploaded_key) else ''
 lesson.save()
 
 if wants(uploaded_key):
+    # .delay(...) with Celery, .enqueue(...) with Django Tasks
     transaction.on_commit(lambda: seal_task.delay(lesson.pk, uploaded_key))
+```
 
-# tasks.py (Celery — or RQ, a thread, a management command)
+`seal` is synchronous and idempotent, so any task runner works:
+
+```python
+# Celery
 @shared_task(acks_late=True)
 def seal_task(pk, key):
     return seal(Lesson, pk, key)
+
+# Django 6.0 Tasks
+from django.tasks import task
+
+@task
+def seal_task(pk, key):
+    return seal(Lesson, pk, key)
+
+# RQ:        queue.enqueue(seal, Lesson, pk, key)
+# Huey:      @db_task() def seal_task(pk, key): return seal(Lesson, pk, key)
+# Django-Q2: async_task('vidlock.pipeline.seal', Lesson, pk, key)
 ```
 
-Until sealing finishes the MP4 keeps playing. If a new upload replaces the
-video while ffmpeg runs, the job notices and throws its work away.
+The MP4 keeps playing until sealing finishes. If a new upload replaces the
+video while ffmpeg is running, the job notices and throws its work away. If
+anything fails, the upload stays as it was.
 
-**Your playback endpoint** checks access as it always did, then:
+### Your playback endpoint
+
+Check access the way you always have, then:
 
 ```python
 from vidlock.views import playback_info
@@ -151,14 +212,16 @@ def playback(request, pk):
 
 ```json
 {"format": "hls", "url": "https://…/video/42/media.m3u8?t=…",
- "media_url": "https://bucket…", "key_url": "https://…/video/42/key?t=…", "expires_in": 600}
+ "media_url": "https://bucket…", "key_url": "https://…/video/42/key?t=…",
+ "expires_in": 600, "duration": 2712.4, "watermark": "amira@example.com"}
 ```
 
-**The page:**
+### The page
 
 ```html
+{% load vidlock %}
 <video id="player" controls playsinline></video>
-<script src="{% static 'vidlock/player.js' %}"></script>
+{% vidlock_player %}
 <script>
   VidLock.attach(document.getElementById('player'), {
     endpoint: '/lessons/42/playback/',
@@ -167,83 +230,246 @@ def playback(request, pk):
 </script>
 ```
 
-### Bucket CORS
+`{% vidlock_player %}` loads `player.js` and the copy of hls.js bundled with
+vidlock (1.7.3, from your own static files, so there is no third-party CDN
+in the path). `attach` also accepts these options:
 
-hls.js reads byte ranges from the bucket with XHR, so the bucket must allow
-it. The signed URL is still the only way in; CORS only lets the browser read
-the answer.
+| Option | |
+|---|---|
+| `lang` | Status messages in `en`, `ar`, `fr`, `es`, `pt`, `de` or `tr`. Default: `<html lang>`, then the browser's language. |
+| `messages` | Your own wording, e.g. `{failed: '…', offline: '…'}`. |
+| `watermark` | `false` to hide it, or `{text, opacity, interval}` to override the server's. |
+| `hlsConfig` | Merged into hls.js's config (buffer sizes, ABR tuning…). |
+| `onHls` | `(hls) => {}`, called with the hls.js instance before it loads, e.g. for analytics. |
+| `headers` | Extra headers for the playback request, e.g. a CSRF or auth header. |
+
+`attach` returns `{reload(), destroy()}`.
+
+### The watermark
+
+Return text from `SealedBackend.watermark(user, video)` and the player draws
+it over the video at 40% opacity, moving to a new spot every eight seconds.
+Deleting it from the developer console puts it straight back. In fullscreen,
+the player fullscreens a frame around the video so the watermark stays
+visible. The exception is iOS, whose own fullscreen player draws nothing over
+itself; use `playsinline` to keep iPhone viewers inline.
+
+## Storage
+
+**Any S3-compatible bucket** (the default): fill in the `S3_*` settings.
+hls.js reads byte ranges with XHR, so the bucket's CORS must allow it. The
+signed URL is still the only way in; CORS only lets the browser read the
+answer.
 
 ```json
-[{"AllowedOrigins": ["*"], "AllowedMethods": ["GET", "HEAD"],
+[{"AllowedOrigins": ["https://your-site.example"], "AllowedMethods": ["GET", "HEAD"],
   "AllowedHeaders": ["range"], "ExposeHeaders": ["content-length", "content-range"],
   "MaxAgeSeconds": 3600}]
 ```
 
-### Mobile apps
+**Google Cloud Storage, Azure Blob, or any Django storage:**
 
-Authenticate the playback request with a Bearer token (DRF/SimpleJWT set
-`request.auth`) and vidlock issues an **app** token, which needs no cookie.
-Hand `url` to ExoPlayer's `HlsMediaSource` or `AVPlayer`: both fetch the key
-themselves. Before `expires_in`, ask again and reload at the current position.
+```python
+STORAGES = {
+    ...,
+    'videos': {'BACKEND': 'storages.backends.gcloud.GoogleCloudStorage',
+               'OPTIONS': {'bucket_name': 'my-private-videos', 'querystring_auth': True}},
+}
+VIDLOCK = {..., 'STORAGE': 'vidlock.storage.DjangoStorage', 'DJANGO_STORAGE': 'videos'}
+```
+
+**Anything else:** write a class with `download`, `upload`, `signed_url` and
+`delete` (see `vidlock/storage.py`) and point `STORAGE` at it.
+
+## Mobile apps
+
+Authenticate the playback request with a Bearer token (DRF, SimpleJWT and
+django-ninja all set `request.auth`), and vidlock issues an **app** token,
+which needs no cookie. Hand `url` to ExoPlayer's `HlsMediaSource` or to
+`AVPlayer`; both fetch the key themselves. Before `expires_in` runs out, ask
+the endpoint again and reload at the current position. App tokens are
+protected by the fetch limits and by the password binding (see below).
+
+## Security model
+
+| Layer | What it stops |
+|---|---|
+| Encrypted file in the bucket | A leaked or scraped media URL: the bytes are AES-128, and the key is not in the bucket. |
+| **Keys at rest** | A leaked database dump: every video key is encrypted under `KEY_ENCRYPTION_KEYS` (encrypt-then-MAC, standard library only). The dump alone opens nothing. |
+| Per-viewer, per-video, 10-minute tokens | Sharing a link: it opens one video for one viewer, briefly, and `can_watch()` is asked again every time. |
+| **Session binding** (web) | A key URL pasted into a download tool: it has no session cookie. Logging out voids the session's tokens. |
+| **Password binding** (web and app) | A password change voids every token that viewer already holds. |
+| **Fetch Metadata** (web) | A key opened in a tab or requested cross-site is refused. With `STRICT_FETCH_METADATA`, so is any request without the `Sec-Fetch-*` headers every current browser sends. |
+| **Depth and breadth limits** | Repeated key pulls, and harvesting a whole course one lesson at a time. |
+| **Watermark** | Screen recording, which no web technology can prevent, becomes traceable. |
+
+When a limit is crossed, vidlock answers 429, logs a warning, sends
+`vidlock.signals.key_abuse` (with `reason`) and calls `ON_KEY_ABUSE`, at most
+once per viewer and day. It is up to you whether to alert, suspend or ignore.
+
+```python
+from django.dispatch import receiver
+from vidlock.signals import key_abuse
+
+@receiver(key_abuse)
+def alert(sender, request, user, video, reason, **kwargs):
+    mail_admins('vidlock', f'{user} crossed the {reason} limit on {video}')
+```
+
+## Operating it
+
+**Management commands**
+
+```bash
+manage.py vidlock_status                      # videos per state, keys waiting for a rewrap
+manage.py vidlock_seal                        # seal existing videos (unsealed, pending, failed)
+manage.py vidlock_seal courses.Lesson --state failed --limit 50
+manage.py vidlock_seal --queue                # hand them to VIDLOCK['ENQUEUE_SEAL'] instead
+manage.py vidlock_rewrap                      # re-encrypt keys under the first KEY_ENCRYPTION_KEYS
+manage.py vidlock_export courses.Lesson 42 lesson-42.mp4   # decrypt back to a playable MP4
+```
+
+**Admin**
+
+```python
+from vidlock.admin import SealedVideoAdminMixin
+
+@admin.register(Lesson)
+class LessonAdmin(SealedVideoAdminMixin, admin.ModelAdmin):
+    list_display = ('title', 'seal_status')
+    list_filter = ('sealed_state',)
+```
+
+The mixin adds a *Protection* column, a read-only duration and error, and a
+*Seal again* action. The action goes through `ENQUEUE_SEAL` when that is set,
+and seals inline otherwise.
+
+**System checks.** `manage.py check` reports a missing backend, storage or
+ffmpeg, mistyped setting names, and keys still derived from `SECRET_KEY`.
+
+**Signals.** `vidlock.signals.seal_finished(sender=Model, pk, state, error,
+video_key)` fires after every sealing job; `key_abuse` is described above.
+
+**Rotating the key-encryption key.** Put the new secret first
+(`'KEY_ENCRYPTION_KEYS': [new, old]`), deploy, run `vidlock_rewrap`, and
+remove `old` once `vidlock_status` reports no keys waiting. Without
+`KEY_ENCRYPTION_KEYS`, keys are derived from `SECRET_KEY` (and
+`SECRET_KEY_FALLBACKS`). In that case, rotating `SECRET_KEY` without keeping
+the old value as a fallback makes every sealed video unplayable. That is why
+`manage.py check` asks you to set a separate secret.
+
+**Backups.** Once sealed, a video is only playable with its key, and the key
+lives in your database. Back up the database like the valuable thing it now
+is. If you would also like the originals kept, set `KEEP_SOURCE = True`, or
+recover any video later with `vidlock_export`.
 
 ## Settings
 
 | Key | Default | |
 |---|---|---|
 | `BACKEND` | — | Dotted path to your `SealedBackend` subclass. |
-| `STORAGE` | S3Storage | Dotted path to a class with `download`, `upload`, `signed_url`, `delete`. |
+| `STORAGE` | S3Storage | Dotted path to a storage class; `vidlock.storage.DjangoStorage` wraps a Django storage. |
 | `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | | For the default storage. |
-| `FFMPEG_BINARY` | `ffmpeg` | |
-| `SEGMENT_SECONDS` | `10` | Each range is one GET on the bucket. 30 means a third of the billed requests and coarser seeking. |
+| `DJANGO_STORAGE` | `'default'` | Alias in `settings.STORAGES` used by `DjangoStorage`. |
+| `FFMPEG_BINARY` / `FFPROBE_BINARY` | `ffmpeg` / beside ffmpeg | |
+| `SEGMENT_SECONDS` | `10` | Each range is one GET on the bucket. `30` means a third of the billed requests and coarser seeking. |
+| `KEEP_SOURCE` | `False` | Keep the uploaded MP4 after sealing. |
 | `TOKEN_TTL` | `600` | Seconds a token and a signed media URL live. |
-| `KEY_FETCHES_PER_HOUR` | `20` | Per viewer and video; beyond it the key is refused (429). |
-| `ON_KEY_ABUSE` | — | Dotted path to `fn(request, user, video)`, called once a day per viewer and video past the limit. |
-| `HLS_JS_URL` | jsDelivr hls.js 1.5.20 light | |
+| `KEY_FETCHES_PER_HOUR` | `20` | Depth limit: key fetches per viewer, video and hour. |
+| `KEY_VIDEOS_PER_HOUR` | `30` | Breadth limit: different videos keyed per viewer and hour. `None` turns it off. |
+| `STRICT_FETCH_METADATA` | `False` | Also refuse web key requests that carry no `Sec-Fetch-*` headers. Test with Safari before you enable it. |
+| `ON_KEY_ABUSE` | — | Dotted path to `fn(request, user, video)`, called once a day per viewer past a limit. |
+| `KEY_ENCRYPTION_KEYS` | from `SECRET_KEY` | Secrets that encrypt the stored video keys; the first one encrypts. |
+| `ENQUEUE_SEAL` | — | Dotted path to `fn(model, pk, video_key)` that queues sealing; used by the admin and `vidlock_seal --queue`. |
+| `HLS_JS_URL` / `HLS_JS_INTEGRITY` | bundled copy | Load hls.js from elsewhere, with a Subresource Integrity hash. |
 
-With several tenants or sites on one cache, override
+If several tenants or sites share one cache, override
 `SealedBackend.namespace(request)` so their fetch counters stay apart.
+
+## Translations
+
+Server messages and the admin come in English, Arabic, French, Spanish,
+Portuguese, German and Turkish, following Django's active language; the
+player follows `<html lang>`. Corrections and new languages are welcome:
+they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
+
+## Upgrading from 0.1
+
+* Keys sealed by 0.1 are stored raw. They keep working; run
+  `manage.py vidlock_rewrap` once to encrypt them.
+* Tokens now carry session and account fingerprints. Tokens issued by 0.1
+  keep working until they expire (ten minutes).
+* The player now loads the bundled hls.js 1.7.3. Use `{% vidlock_player %}`,
+  or set `HLS_JS_URL` to keep a CDN.
+* `packager.probe()` returns a `Probe` object. It still unpacks as
+  `video, audio = probe(path)`.
+* New checks may skip 10-bit and 4:4:4 H.264 that 0.1 sealed but browsers
+  could not play.
 
 ## Costs
 
-On Cloudflare R2 (free egress), a 45-minute lesson at 10-second segments is
-about 270 class-B reads per full view: the free 10 million a month cover
-roughly 37,000 full views. Sealing costs a second of one core per upload.
+On Cloudflare R2 (free egress), a 45-minute lesson at 10-second segments
+costs about 270 class-B reads per full view, so the free 10 million a month
+cover roughly 37,000 full views. Sealing costs about one second of one CPU
+core per upload.
+
+## FAQ
+
+**Adaptive bitrate (several qualities)?** Not in vidlock. It would mean
+re-encoding every upload, which is exactly the cost vidlock exists to avoid.
+Upload at a sensible bitrate (for example 720p at 1.5–2.5 Mbps for lectures),
+or encode your renditions before uploading.
+
+**Can a determined user still get the video?** Yes; see *What it is not*.
+The watermark is what makes that expensive for them.
 
 ## Contributing
 
-Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
-Security problems: please read [SECURITY.md](SECURITY.md) first and do not
-open a public issue.
+Issues and pull requests are welcome, in any language you are comfortable
+with. See [CONTRIBUTING.md](CONTRIBUTING.md). For security problems, please
+read [SECURITY.md](SECURITY.md) first and do not open a public issue.
 
 ## License
 
-MIT © Nader Yasser
+MIT © Nader Yasser. The bundled hls.js is © Dailymotion, Apache-2.0 (see
+`src/vidlock/static/vidlock/vendor/hls.js.LICENSE`).
 
 ---
 
 ## بالعربي
 
-**اقفل فيديوهات كورساتك.** مكتبة Django بتحوّل كل فيديو بيترفع لملف واحد
-مشفّر (HLS بـAES-128). اللي ينزّل الفيديو من الرابط ياخد ملف مالوش أي لازمة
-من غير المفتاح، والمفتاح بيروح بس للطالب اللي إنت سامحله يتفرج، ولمدة ١٠ دقايق.
-
-معمولة للمنصات التعليمية اللي ميزانيتها محدودة: من غير رخصة DRM، ومن غير
-خدمة فيديو مدفوعة، ومن غير إعادة ترميز. أمر ffmpeg واحد لكل فيديو (ثانية
-تقريبًا)، وملف واحد في الـbucket.
+**اقفل فيديوهات كورساتك من غير ميزانية DRM.** مكتبة Django بتحوّل كل فيديو
+بيترفع لملف واحد مشفّر (HLS بـAES-128). اللي ينزّل الفيديو ياخد ملف مالوش
+لازمة من غير المفتاح، والمفتاح بيروح بس للطالب اللي إنت سامحله يتفرج، ولمدة
+١٠ دقايق.
 
 **بتعمل إيه:**
-- **بتشفّر الفيديو لوحدها بعد الرفع،** والـMP4 الأصلي بيتمسح بعدها.
-- **المفتاح بيتفحص مع كل طلب:** بتسأل دالتك `can_watch` كل مرة، فالطالب
-  اللي اشتراكه اتلغى بيتقفل عليه فورًا.
+- **بتشفّر الفيديو لوحدها بعد الرفع** بأمر ffmpeg واحد من غير إعادة ترميز،
+  والـMP4 الأصلي بيتمسح (أو بيفضل لو فعّلت `KEEP_SOURCE`).
+- **المفتاح نفسه متشفّر في الداتابيز،** فلو نسخة من الداتابيز اتسرّبت مش
+  هتفتح أي فيديو.
+- **الصلاحية بتتفحص مع كل طلب:** دالتك `can_watch` بتتسأل كل مرة، فلو
+  الاشتراك اتلغى أو الطالب عمل تسجيل خروج أو غيّر الباسورد، بيتقفل عليه فورًا.
 - **برامج التحميل مابتاخدش المفتاح:** زي yt-dlp وN_m3u8DL-RE، لأن التوكن
-  بتاع المتصفح لازم يكون معاه كوكي نفس الطالب. واللي يطلب المفتاح كتير في
-  الساعة بيترفض وإنت بيوصلك تنبيه.
-- **بتشتغل على كل حاجة:** كروم وفايرفوكس بـhls.js، وسفاري والآيفون من غير
-  حاجة، والأبلكيشن بـExoPlayer أو AVPlayer.
+  مربوط بجلسة الطالب نفسها. واللي بيطلب مفاتيح كتير في الساعة بيترفض، سواء
+  كرر نفس الفيديو أو حاول يسحب كورس كامل درس درس، وإنت بيوصلك تنبيه.
+- **علامة مائية متحركة** باسم الطالب أو رقمه فوق الفيديو، وبتفضل ظاهرة حتى
+  في وضع ملء الشاشة، فأي تسجيل شاشة يبان مين اللي عمله.
+- **بتشتغل على كل حاجة:** كروم وفايرفوكس بـhls.js (متضمّن جوه المكتبة)،
+  وسفاري والآيفون، والأبلكيشن بـExoPlayer أو AVPlayer.
+- **أي تخزين:** Cloudflare R2 وS3 وMinIO وB2، أو Google Cloud وAzure عن طريق
+  django-storages.
+- **أدوات تشغيل:** أوامر `vidlock_seal` و`vidlock_status` و`vidlock_rewrap`
+  و`vidlock_export`، وإجراء «تشفير مرة أخرى» في لوحة الأدمن، وفحوصات
+  `manage.py check`.
+- **رسائل بالعربي** في السيرفر والأدمن والمشغّل، ومعاها الإنجليزي والفرنساوي
+  والإسباني والبرتغالي والألماني والتركي.
 
 **مش DRM:** حد فاهم ومصمّم يقدر يوصل للمفتاح في الآخر. الهدف إن الملف المتحمّل
-مايشتغلش، وإن البرامج السهلة تفشل. استعملها مع علامة مائية باسم الطالب ضد
-تسجيل الشاشة.
+مايشتغلش، وإن البرامج السهلة تفشل، وإن تسجيل الشاشة يبان مين وراه.
 
-المشاركة مرحّب بيها: افتح Issue أو Pull Request، والتفاصيل في
-[CONTRIBUTING.md](CONTRIBUTING.md).
+**مهم:** بعد التشفير، المفتاح موجود في الداتابيز بس، فخلّي عندك نسخة احتياطية
+منها. وحط `KEY_ENCRYPTION_KEYS` بسر مستقل عن `SECRET_KEY`.
+
+المشاركة مرحّب بيها بالعربي أو بالإنجليزي: افتح Issue أو Pull Request،
+والتفاصيل في [CONTRIBUTING.md](CONTRIBUTING.md).

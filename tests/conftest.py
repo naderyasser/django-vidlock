@@ -15,6 +15,7 @@ def _clean(settings):
 
     storage.OBJECTS.clear()
     storage.DELETED.clear()
+    storage.SIGNED.clear()
     backend.REPORTS.clear()
     cache.clear()
     settings.VIDLOCK = {**settings.VIDLOCK, 'FFMPEG_BINARY': os.environ.get('VIDLOCK_TEST_FFMPEG', 'ffmpeg')}
@@ -42,6 +43,8 @@ def sample(tmp_path):
             'sine=duration=25',
             '-c:v',
             'libx264',
+            '-pix_fmt',
+            'yuv420p',
             '-c:a',
             'aac',
             '-shortest',

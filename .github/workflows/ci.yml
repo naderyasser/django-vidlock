@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -15,19 +18,64 @@ jobs:
           python-version: '3.12'
       - run: pip install ruff==0.15.8 black==24.8.0
       - run: ruff check . && black --check .
+      - name: player.js parses
+        run: node --check src/vidlock/static/vidlock/player.js
+      - name: translations compile
+        run: |
+          sudo apt-get update -q && sudo apt-get install -yq gettext
+          for po in src/vidlock/locale/*/LC_MESSAGES/django.po; do msgfmt --check -o /dev/null "$po"; done
 
   test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.10', '3.12', '3.13']
-        django: ['4.2', '5.1']
+        include:
+          - { python: '3.10', django: '4.2' }
+          - { python: '3.12', django: '4.2' }
+          - { python: '3.12', django: '5.1' }
+          - { python: '3.10', django: '5.2' }
+          - { python: '3.13', django: '5.2' }
+          - { python: '3.14', django: '5.2' }
+          - { python: '3.12', django: '6.0' }
+          - { python: '3.14', django: '6.0' }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
+          allow-prereleases: true
       - run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg
       - run: pip install "django~=${{ matrix.django }}.0" -e ".[test]"
-      - run: pytest -q
+      - run: pytest -q --cov --cov-report=term
+
+  browser:
+    # hls.js in Google Chrome: fetches the key, decrypts and plays the stream.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg
+      - run: pip install -e ".[test,browser]"
+      - run: pytest -q tests/test_browser.py
+        env:
+          VIDLOCK_TEST_BROWSER_CHANNEL: chrome
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install build twine
+      - run: python -m build && twine check --strict dist/*
+      - name: the wheel carries the player, hls.js and translations
+        run: |
+          unzip -l dist/*.whl | tee /tmp/wheel.txt
+          grep -q 'vidlock/static/vidlock/player.js' /tmp/wheel.txt
+          grep -q 'vidlock/static/vidlock/vendor/hls.light.min.js' /tmp/wheel.txt
+          grep -q 'vidlock/locale/ar/LC_MESSAGES/django.mo' /tmp/wheel.txt
+          grep -q 'vidlock/py.typed' /tmp/wheel.txt
