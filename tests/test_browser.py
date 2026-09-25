@@ -76,11 +76,13 @@ def open_page(browser, base, session, lesson):
     context = browser.new_context()
     context.add_cookies([{'name': 'sessionid', 'value': session, 'url': base}])
     page = context.new_page()
-    seen = {'keys': [], 'shares': 0, 'beats': []}
+    seen = {'keys': [], 'key_requests': 0, 'shares': 0, 'beats': []}
 
     def on_request(request):
-        if f'/sealed/{lesson.pk}/key' in request.url and request.headers.get('x-vidlock-key-share'):
-            seen['shares'] += 1
+        if f'/sealed/{lesson.pk}/key' in request.url:
+            seen['key_requests'] += 1
+            if request.headers.get('x-vidlock-key-share'):
+                seen['shares'] += 1
 
     def on_response(response):
         if f'/sealed/{lesson.pk}/key' in response.url:
@@ -104,7 +106,9 @@ def test_a_sealed_video_is_keyed_decrypted_and_watermarked(watching, live_server
 
     # The key crossed sealed to this page, and hls.js decrypted the stream with it.
     assert seen['keys'][0] == (200, 'application/vnd.vidlock.wrapped-key'), seen
-    assert seen['shares'] == len(seen['keys'])
+    # Every key request carried the page's public key (counted as they leave,
+    # so a request still in flight when this runs cannot skew it).
+    assert seen['shares'] == seen['key_requests'], seen
     assert state['parsed'] > 0, state
     assert any(codec.startswith('avc1') for codec in state['codecs']), state
 
