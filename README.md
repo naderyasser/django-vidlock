@@ -18,7 +18,7 @@ Viewers watch in hls.js, Safari, iOS, ExoPlayer or AVPlayer.
 [العربية ↓](#بالعربي)
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/watch.png" alt="A sealed lesson playing with the viewer's watermark, and search inside the lesson" width="820">
+  <img src="docs/screenshots/demo.gif" alt="The demo in motion: lessons, a sealed lesson playing under the viewer's watermark, the teacher report" width="820">
 </p>
 
 ---
@@ -123,9 +123,9 @@ no Redis:
 cd example && pip install -e .. && python manage.py migrate && python manage.py demo && python manage.py runserver
 ```
 
-| Lessons | Teacher report | Search (phone) |
+| Watching | Teacher report | Search (phone) |
 | --- | --- | --- |
-| <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/lessons.png" alt="Lesson list" width="300"> | <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/report.png" alt="Teacher report: viewers, heatmap, insights" width="300"> | <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/mobile-search.png" alt="Search inside every lesson on a phone" width="150"> |
+| <img src="docs/screenshots/watch.png" alt="A sealed lesson playing with the watermark, and search inside it" width="300"> | <img src="docs/screenshots/report.png" alt="Teacher report: viewers, heatmap, insights" width="300"> | <img src="docs/screenshots/mobile-search.png" alt="Search inside every lesson on a phone" width="150"> |
 
 ## Requirements
 

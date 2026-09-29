@@ -162,3 +162,84 @@ ul.messages li { padding: 10px 14px; border: 1px solid rgba(230, 200, 121, 0.3);
 .center { display: grid; place-items: center; min-height: 70vh; }
 @media (max-width: 640px) { .nav-search { display: none; } main { padding-top: 20px; } }
 @media (prefers-reduced-motion: reduce) { .beam::before { animation: none; } .lesson-card, .beam { transition: none; } }
+
+/* ── Motion ────────────────────────────────────────────────────────────────
+ * Everything below moves; all of it stops for prefers-reduced-motion.
+ */
+
+/* Aurora: slow coloured light drifting behind the stars. */
+.aurora { position: fixed; inset: 0; z-index: -3; overflow: hidden; pointer-events: none; }
+.aurora i { position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(90px); opacity: 0.22; mix-blend-mode: screen; }
+.aurora i:nth-child(1) { background: #3b5bdb; left: -20vmax; top: -25vmax; animation: vl-drift-a 26s ease-in-out infinite alternate; }
+.aurora i:nth-child(2) { background: #e6c879; right: -25vmax; top: 10vh; opacity: 0.12; animation: vl-drift-b 32s ease-in-out infinite alternate; }
+.aurora i:nth-child(3) { background: #7fc4ff; left: 20vw; bottom: -35vmax; opacity: 0.16; animation: vl-drift-c 38s ease-in-out infinite alternate; }
+@keyframes vl-drift-a { to { transform: translate(30vw, 20vh) scale(1.2); } }
+@keyframes vl-drift-b { to { transform: translate(-35vw, 30vh) scale(0.85); } }
+@keyframes vl-drift-c { to { transform: translate(25vw, -30vh) scale(1.15); } }
+
+/* A soft light that follows the pointer. */
+.glow { position: fixed; left: 0; top: 0; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%; pointer-events: none; z-index: -1;
+  background: radial-gradient(circle, rgba(127, 196, 255, 0.10), rgba(230, 200, 121, 0.05) 40%, transparent 70%);
+  transform: translate3d(var(--gx, -999px), var(--gy, -999px), 0); transition: opacity 0.4s; }
+
+/* Entrance: each block rises into place, one after another. */
+.rise { animation: vl-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 90ms); }
+@keyframes vl-rise { from { opacity: 0; transform: translateY(24px) scale(0.985); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* Gold words shimmer. */
+h1 em {
+  background: linear-gradient(100deg, var(--gold) 20%, #fff6d8 40%, var(--gold) 60%, #c9a44f 80%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: vl-shimmer 5s linear infinite;
+}
+@keyframes vl-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
+/* The brand dot breathes. */
+.brand-mark::before { animation: vl-breathe 2.8s ease-in-out infinite; }
+@keyframes vl-breathe { 50% { transform: scale(1.35); box-shadow: 0 0 22px rgba(230, 200, 121, 0.9); } }
+
+/* Cards: a spotlight under the pointer; lesson cards tilt towards it. */
+.card { background:
+  radial-gradient(420px circle at var(--mx, -999px) var(--my, -999px), rgba(230, 200, 121, 0.09), transparent 45%),
+  linear-gradient(to bottom, rgba(18, 24, 50, 0.72), rgba(14, 18, 34, 0.72)); }
+.lesson-card { transform-style: preserve-3d; transition: transform 0.2s ease-out, border-color 0.25s, box-shadow 0.25s; }
+.lesson-card:hover { transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-4px); box-shadow: var(--shadow), 0 20px 60px -20px rgba(230, 200, 121, 0.25); }
+
+/* The player sits in a ring of light that turns. */
+@property --vl-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.player-shell::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: conic-gradient(from var(--vl-angle), transparent 0 70%, var(--sky) 80%, var(--gold) 90%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: vl-turn 6s linear infinite;
+}
+.player-shell { box-shadow: var(--shadow), 0 0 80px -30px rgba(127, 196, 255, 0.35); }
+@keyframes vl-turn { to { --vl-angle: 360deg; } }
+
+/* Report: bars grow, progress fills, numbers count up (motion.js). */
+.heat div { transform-origin: bottom; animation: vl-grow 1s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(300ms + var(--i, 0) * 45ms); transition: filter 0.2s; }
+.heat div:hover { filter: brightness(1.35); }
+@keyframes vl-grow { from { transform: scaleY(0); } }
+.bar i { transform-origin: left; animation: vl-fill 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s both; }
+@keyframes vl-fill { from { transform: scaleX(0); } }
+.stat { transition: transform 0.25s, border-color 0.25s; }
+.stat:hover { transform: translateY(-3px); border-color: rgba(127, 196, 255, 0.35); }
+
+/* Search hits slide in; the dot of an insight pulses. */
+.hit { animation: vl-slide 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(200ms + var(--i, 0) * 80ms); transition: background 0.2s; border-radius: 8px; }
+a.hit:hover { background: rgba(127, 196, 255, 0.05); }
+@keyframes vl-slide { from { opacity: 0; transform: translateX(-16px); } }
+.insight .dot { animation: vl-ping 2.4s ease-out infinite; }
+@keyframes vl-ping { 0% { box-shadow: 0 0 0 0 rgba(127, 196, 255, 0.55); } 70%, 100% { box-shadow: 0 0 0 10px rgba(127, 196, 255, 0); } }
+.insight .dot.gold { animation-name: vl-ping-gold; }
+@keyframes vl-ping-gold { 0% { box-shadow: 0 0 0 0 rgba(230, 200, 121, 0.6); } 70%, 100% { box-shadow: 0 0 0 10px rgba(230, 200, 121, 0); } }
+
+/* Buttons lean towards the pointer (motion.js) and send a ripple when pressed. */
+.beam, .gold-btn { will-change: transform; }
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; z-index: 2; background: rgba(255, 255, 255, 0.35); transform: scale(0); animation: vl-ripple 0.6s ease-out forwards; }
+@keyframes vl-ripple { to { transform: scale(4); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .glow, .aurora { display: none; }
+}

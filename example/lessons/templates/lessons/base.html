@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="{% static 'lessons/theme.css' %}">
 </head>
 <body>
+<div class="aurora"><i></i><i></i><i></i></div>
 <div class="sky"><canvas id="sky"></canvas></div>
 <nav class="nav"><div class="nav-inner">
   <a class="brand" href="{% url 'lessons' %}"><span class="brand-mark"></span>vidlock</a>
@@ -23,5 +24,6 @@
   {% block content %}{% endblock %}
 </main>
 <script src="{% static 'lessons/constellation.js' %}" defer></script>
+<script src="{% static 'lessons/motion.js' %}" defer></script>
 </body>
 </html>

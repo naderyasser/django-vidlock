@@ -9,7 +9,7 @@
   if (!canvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const ctx = canvas.getContext('2d');
   const LINK = 150;
-  let width = 0, height = 0, nodes = [], running = true;
+  let width = 0, height = 0, nodes = [], sparks = [], running = true;
   const pointer = { x: -1000, y: -1000 };
 
   function resize() {
@@ -45,6 +45,20 @@
         }
       }
     }
+    for (let i = 0; i < nodes.length; i++) {
+      const d = Math.hypot(nodes[i].x - pointer.x, nodes[i].y - pointer.y);
+      if (d < 200) {
+        ctx.strokeStyle = '#7FC4FF';
+        ctx.globalAlpha = (1 - d / 200) * 0.6;
+        ctx.beginPath(); ctx.moveTo(pointer.x, pointer.y); ctx.lineTo(nodes[i].x, nodes[i].y); ctx.stroke();
+      }
+    }
+    sparks = sparks.filter(function (s) { return s.life > 0; });
+    sparks.forEach(function (s) {
+      s.x += s.vx; s.y += s.vy; s.vx *= 0.96; s.vy *= 0.96; s.life -= 0.02;
+      ctx.fillStyle = '#E6C879'; ctx.globalAlpha = Math.max(0, s.life);
+      ctx.beginPath(); ctx.arc(s.x, s.y, 1.6, 0, Math.PI * 2); ctx.fill();
+    });
     const now = Date.now();
     nodes.forEach(function (n) {
       n.x += n.vx; n.y += n.vy;
@@ -67,6 +81,12 @@
 
   window.addEventListener('resize', resize);
   document.addEventListener('mousemove', function (e) { pointer.x = e.clientX; pointer.y = e.clientY; });
+  document.addEventListener('pointerdown', function (e) {
+    for (let i = 0; i < 18; i++) {
+      const a = (Math.PI * 2 * i) / 18, v = 2 + Math.random() * 2.5;
+      sparks.push({ x: e.clientX, y: e.clientY, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 });
+    }
+  });
   document.addEventListener('mouseleave', function () { pointer.x = pointer.y = -1000; });
   document.addEventListener('visibilitychange', function () {
     running = !document.hidden;
