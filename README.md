@@ -310,6 +310,35 @@ manage.py vidlock_trace K7QMZ4               # searches the last 60 days
 manage.py vidlock_trace K7QMZ4 --day 2026-09-25
 ```
 
+## Who watched what
+
+The player reports the stretches of video it actually played, and vidlock
+keeps, per viewer and video, the seconds watched, where they stopped, and
+how often each ten seconds was played. Seeking past a part does not count as
+watching it, and re-watching counts again.
+
+```python
+from vidlock import progress
+
+progress.report(lesson)
+# {'viewers': 212, 'completed': 148, 'average_completion': 0.81,
+#  'hours_watched': 139.5, 'heatmap': [212, 209, …, 97], 'most_replayed_at': 1330}
+
+progress.for_viewer(student)     # WatchProgress rows: .completion, .position, .seconds_watched
+```
+
+```bash
+manage.py vidlock_progress courses.Lesson 42
+# 212 viewers, 148 finished, 81% watched on average, 139.5 hours in all
+# ▇▇▇▆▆▆▅▅▅▅▆█▇▅▄▄▄▄▃▃
+# most played around 22:10
+```
+
+`WatchProgress` also has a read-only admin page. It needs
+`manage.py migrate`, and `TRACK_PROGRESS = False` turns it off. The numbers
+come from the viewer's browser, so each heartbeat may claim no more than
+could have played since the last one. Treat them as analytics, not proof.
+
 ## One screen at a time
 
 ```python
@@ -516,6 +545,7 @@ recover any video later with `vidlock_export`.
 | `RISK_THRESHOLD` / `RISK_SUSPEND_SECONDS` / `RISK_WEIGHTS` | `10` / `0` / `{}` | The daily score that flags a viewer, how long a flagged viewer is paused (`0`: flag only), and weight overrides. |
 | `MAX_NETWORKS_PER_DAY` | `6` | Networks (/24, /48) a viewer may use in a day before each new one adds to the score. |
 | `WATERMARK_CODE` | `True` | Add the traceable code (and time) to the watermark. |
+| `TRACK_PROGRESS` | `True` | Record watch progress from the heartbeat (`vidlock.progress`). |
 | `ON_KEY_ABUSE` | — | Dotted path to `fn(request, user, video)`, called once a day per viewer past a limit. |
 | `KEY_ENCRYPTION_KEYS` | from `SECRET_KEY` | Secrets that encrypt the stored video keys; the first one encrypts. |
 | `ENQUEUE_SEAL` | — | Dotted path to `fn(model, pk, video_key)` that queues sealing; used by the admin and `vidlock_seal --queue`. |
@@ -532,6 +562,13 @@ player follows `<html lang>`. Corrections and new languages are welcome:
 they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 ## Upgrading
+
+**From 0.3 to 0.4**
+
+* Run `manage.py migrate`: vidlock now has a table of its own,
+  `WatchProgress`.
+* Update the player (it comes with the package). Older players keep working,
+  but they send no progress.
 
 **From 0.2 to 0.3**
 
@@ -635,6 +672,8 @@ MIT © Nader Yasser. The bundled hls.js is © Dailymotion, Apache-2.0 (see
 - **أدوات تشغيل:** أوامر `vidlock_seal` و`vidlock_status` و`vidlock_rewrap`
   و`vidlock_export` و`vidlock_trace` و`vidlock_risk`، وإجراء «تشفير مرة أخرى» في لوحة الأدمن، وفحوصات
   `manage.py check`.
+- **متابعة المشاهدة:** مين اتفرج فعلًا، ووقف فين، وأنهي جزء الطلبة بيعيدوه
+  كتير، من غير أي كود زيادة. `manage.py vidlock_progress` بيطلّع التقرير.
 - **رسائل بالعربي** في السيرفر والأدمن والمشغّل، ومعاها الإنجليزي والفرنساوي
   والإسباني والبرتغالي والألماني والتركي.
 

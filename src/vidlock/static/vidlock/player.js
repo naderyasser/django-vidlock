@@ -450,16 +450,50 @@
       if (options.onEvicted) options.onEvicted(message);
     }
 
+    // The stretches actually played since the last heartbeat, split at every
+    // seek and pause: the server's watch progress (vidlock.progress).
+    let watched = [];
+    let runStart = null;
+    let runEnd = null;
+
+    function closeRun() {
+      if (runStart !== null && runEnd - runStart >= 0.25) {
+        watched.push([Math.round(runStart * 10) / 10, Math.round(runEnd * 10) / 10]);
+      }
+      runStart = runEnd = null;
+    }
+
+    function onTimeUpdate() {
+      if (video.paused || video.seeking) return;
+      const at = video.currentTime;
+      if (runEnd !== null && at >= runEnd && at - runEnd < 1.5) runEnd = at;
+      else { closeRun(); runStart = runEnd = at; }
+    }
+
+    function takeWatched() {
+      const open = runStart !== null;
+      const end = runEnd;
+      closeRun();
+      if (open && !video.paused) runStart = runEnd = end;
+      return watched.splice(0, watched.length);
+    }
+
     function beat() {
       if (!fresh.heartbeat || destroyed || stopped) return;
       const moved = Math.abs(video.currentTime - lastBeatAt) > 0.5;
       lastBeatAt = video.currentTime;
+      const played = takeWatched();
       fetch(fresh.heartbeat, {
         method: 'POST',
         credentials: 'same-origin',
         keepalive: true,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ position: video.currentTime, playing: moved && !video.paused, tamper: tampered() }),
+        body: JSON.stringify({
+          position: video.currentTime,
+          playing: played.length > 0 || (moved && !video.paused),
+          watched: played,
+          tamper: tampered(),
+        }),
       }).then(function (response) {
         if (response.status !== 409 && response.status !== 403) return;
         return response.json().then(function (data) {
@@ -476,6 +510,12 @@
     }
 
     function onPlaying() { setTimeout(beat, 3000); }
+
+    // Report what was just watched before it is lost: on pause, at the end,
+    // and when the page goes away (keepalive lets that request finish).
+    function onStop() { closeRun(); if (watched.length) beat(); }
+    function onSeeking() { closeRun(); }
+    function onPageHide() { onStop(); }
 
     function showWatermark(data) {
       if (options.watermark === false) return;
@@ -629,6 +669,11 @@
     video.addEventListener('error', onError);
     video.addEventListener('play', renewIfDue);
     video.addEventListener('playing', onPlaying);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('seeking', onSeeking);
+    video.addEventListener('pause', onStop);
+    video.addEventListener('ended', onStop);
+    global.addEventListener('pagehide', onPageHide);
     document.addEventListener('visibilitychange', onVisible);
 
     load();
@@ -639,12 +684,18 @@
         return load({ resume: true, takeover: true, at: video.currentTime, playing: true });
       },
       destroy: function () {
+        onStop();
         destroyed = true;
         clearTimeout(renewTimer);
         clearInterval(beatTimer);
         video.removeEventListener('error', onError);
         video.removeEventListener('play', renewIfDue);
         video.removeEventListener('playing', onPlaying);
+        video.removeEventListener('timeupdate', onTimeUpdate);
+        video.removeEventListener('seeking', onSeeking);
+        video.removeEventListener('pause', onStop);
+        video.removeEventListener('ended', onStop);
+        global.removeEventListener('pagehide', onPageHide);
         document.removeEventListener('visibilitychange', onVisible);
         dropHls();
         dropNative();

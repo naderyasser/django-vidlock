@@ -22,6 +22,13 @@ def playback(request, pk):
     return JsonResponse(playback_info(request, get_object_or_404(Lesson, pk=pk)))
 
 
+@login_required
+def report(request, pk):
+    from vidlock import progress
+
+    return JsonResponse(progress.report(get_object_or_404(Lesson, pk=pk)))
+
+
 def bucket(request, key):
     if request.method == 'OPTIONS':
         response = HttpResponse()

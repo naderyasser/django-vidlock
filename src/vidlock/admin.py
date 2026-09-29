@@ -1,4 +1,5 @@
-"""Admin helpers for your own ModelAdmin. vidlock registers no model itself.
+"""Admin helpers for your own ModelAdmin, and a read-only page for
+``WatchProgress`` (who watched what).
 
     from django.contrib import admin
     from vidlock.admin import SealedVideoAdminMixin
@@ -17,6 +18,7 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext
 
 from vidlock import conf, pipeline
+from vidlock.models import WatchProgress
 
 _READONLY = ('video_size', 'sealed_state', 'sealed_error', 'sealed_duration_display')
 
@@ -73,3 +75,27 @@ class SealedVideoAdminMixin:
             )
         else:
             self.message_user(request, _('Nothing to seal among the selected videos.'), messages.WARNING)
+
+
+@admin.register(WatchProgress)
+class WatchProgressAdmin(admin.ModelAdmin):
+    list_display = ('user', 'video_type', 'video_id', 'completion_display', 'minutes', 'last_seen')
+    list_filter = ('video_type',)
+    search_fields = ('video_id',)
+    date_hierarchy = 'last_seen'
+    readonly_fields = tuple(f.name for f in WatchProgress._meta.fields)
+    list_select_related = ('user',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description=_('Watched'))
+    def completion_display(self, obj):
+        return f'{obj.completion:.0%}'
+
+    @admin.display(description=_('Minutes'), ordering='seconds_watched')
+    def minutes(self, obj):
+        return round(obj.seconds_watched / 60)

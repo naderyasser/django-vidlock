@@ -87,6 +87,9 @@ DEFAULTS: dict[str, Any] = {
     # Networks (/24, /48) one viewer may come from in a day before each new
     # one counts towards the risk score. None: not counted.
     'MAX_NETWORKS_PER_DAY': 6,
+    # Record who watched what (vidlock.progress, the WatchProgress model) from
+    # the player's heartbeat.
+    'TRACK_PROGRESS': True,
     # Watermark: add a short code that `manage.py vidlock_trace` turns back
     # into the viewer, plus the date and time, to the text drawn over the video.
     'WATERMARK_CODE': True,

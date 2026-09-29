@@ -8,6 +8,9 @@ stored encrypted under a secret from your settings (see ``vidlock.keys``).
 
 from __future__ import annotations
 
+import math
+
+from django.conf import settings
 from django.db import models
 
 from vidlock import keys
@@ -90,3 +93,50 @@ def sealed_models(labels=None):
             found.append(model)
         return found
     return [m for m in apps.get_models() if issubclass(m, SealedVideoMixin) and not m._meta.abstract]
+
+
+class WatchProgress(models.Model):
+    """How much of one video one viewer has watched, and which parts.
+
+    Written by the player's heartbeat (``vidlock.progress``). ``buckets`` has
+    one count per ``BUCKET_SECONDS`` of video: how many times the viewer
+    played that stretch, so re-watched parts stand out in the heatmap.
+    """
+
+    BUCKET_SECONDS = 10
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='vidlock_progress',
+    )
+    #: The video's model label ('courses.Lesson') and primary key.
+    video_type = models.CharField(max_length=100)
+    video_id = models.CharField(max_length=64)
+    seconds_watched = models.FloatField(default=0)
+    position = models.FloatField(default=0)
+    duration = models.FloatField(default=0)
+    buckets = models.JSONField(default=list, blank=True)
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'watch progress'
+        verbose_name_plural = 'watch progress'
+        constraints = (
+            models.UniqueConstraint(fields=('user', 'video_type', 'video_id'), name='vidlock_progress_once'),
+        )
+        indexes = (models.Index(fields=('video_type', 'video_id'), name='vidlock_progress_video'),)
+
+    def __str__(self):
+        return f'{self.user} · {self.video_type} {self.video_id} · {self.completion:.0%}'
+
+    @property
+    def completion(self) -> float:
+        """Share of the video played at least once, 0.0 to 1.0."""
+        total = self.bucket_count
+        return sum(1 for n in self.buckets[:total] if n) / total if total else 0.0
+
+    @property
+    def bucket_count(self) -> int:
+        return math.ceil(self.duration / self.BUCKET_SECONDS) if self.duration else len(self.buckets)

@@ -124,6 +124,14 @@ def test_a_sealed_video_is_keyed_decrypted_and_watermarked(watching, live_server
         page.evaluate("document.getElementById('player').play()")
         page.wait_for_function("document.getElementById('player').currentTime > 12", timeout=30000)
         assert len({status for status, _ in seen['keys']}) == 1 and len(seen['keys']) >= 2, seen
+        # Pausing reports what was watched: the teacher's report shows it.
+        page.evaluate("document.getElementById('player').pause()")
+        for _ in range(40):
+            report = page.request.get(f'{base}/report/{lesson.pk}/').json()
+            if report['viewers']:
+                break
+            page.wait_for_timeout(250)
+        assert report['viewers'] == 1 and report['hours_watched'] > 0 and any(report['heatmap']), report
 
     for _ in range(40):
         if 200 in seen['beats']:

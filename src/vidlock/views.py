@@ -29,7 +29,7 @@ from django.utils.translation import gettext_lazy
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from vidlock import conf, guard, keys, risk, signals, streams, tokens, trace, wrap
+from vidlock import conf, guard, keys, progress, risk, signals, streams, tokens, trace, wrap
 from vidlock.playlist import CONTENT_TYPE, duration, render, with_token
 from vidlock.storage import MAX_SIGNED_TTL, default_storage
 
@@ -267,9 +267,15 @@ def heartbeat_view(request, video_id):
         report = json.loads(request.body or b'{}')
     except ValueError:
         report = {}
-    if isinstance(report, dict) and report.get('playing'):
+    report = report if isinstance(report, dict) else {}
+    watched = report.get('watched') or []
+    if report.get('playing') or watched:
         risk.played(user.pk, found.lease, video_id, namespace)
-    if isinstance(report, dict) and report.get('tamper'):
+    if watched and conf.get('TRACK_PROGRESS'):
+        video = backend.get_video(video_id)
+        if video is not None:
+            progress.record(user, video, watched, report.get('position'))
+    if report.get('tamper'):
         risk.note(user, 'tamper', namespace, request, once=found.lease or str(video_id))
     risk.stream_seen_from(user, found.lease, backend.client_ip(request), namespace, request)
     return JsonResponse({'ok': True, 'interval': int(conf.get('HEARTBEAT_SECONDS'))})

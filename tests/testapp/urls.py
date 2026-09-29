@@ -8,5 +8,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('watch/<int:pk>/', views.page),
     path('playback/<int:pk>/', views.playback),
+    path('report/<int:pk>/', views.report),
     path('bucket/<path:key>', views.bucket),
 ]

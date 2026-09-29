@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0 — 2026-09-29
+
+### Watch progress
+
+* The player reports the stretches it actually played, splitting them at
+  every seek and pause. It sends them with each heartbeat, on pause, at the
+  end, and when the page closes.
+* `WatchProgress` (vidlock's first model; run `migrate`) keeps, per viewer
+  and video, the seconds watched, the last position, and a play count per
+  10 seconds.
+* `vidlock.progress.report(video)` gives viewers, finishers, average
+  completion, hours and a replay heatmap; `for_viewer(user)` gives one
+  student's rows.
+* `manage.py vidlock_progress`, and a read-only admin page.
+* A heartbeat may claim no more than could have played since the last one
+  (at 2.5x). `TRACK_PROGRESS = False` turns tracking off.
+
 ## 0.3.0 — 2026-09-25
 
 ### Protection

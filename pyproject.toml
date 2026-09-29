@@ -78,6 +78,9 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "SIM", "PLW", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/vidlock/migrations/*" = ["RUF012", "E501"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["vidlock", "tests"]
 
