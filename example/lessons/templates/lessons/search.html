@@ -1,11 +1,14 @@
 {% extends 'lessons/base.html' %}
-{% block title %}Search{% endblock %}
+{% block title %}Search · vidlock{% endblock %}
 {% block content %}
-<h1>Search inside every lesson</h1>
-<form method="get" class="card"><input name="q" value="{{ query }}" autofocus placeholder="A word or a phrase, in any language…" style="width:70%;padding:8px;border:1px solid var(--line);border-radius:8px"> <button>Search</button></form>
+<div class="eyebrow">Search inside every lesson</div>
+<h1>{% if query %}“{{ query }}”{% else %}What was <em>said</em>?{% endif %}</h1>
+<form method="get" class="card row"><input type="search" name="q" value="{{ query }}" autofocus placeholder="A word or a phrase, in any language…"><button class="beam"><span>Search</span></button></form>
 {% if query %}
+  <div class="card">
   {% for hit in hits %}
-    <div class="card"><a href="{% url 'watch' hit.video_id %}#t={{ hit.start }}"><strong>{{ hit.title }}</strong> · {{ hit.start|floatformat:0 }} s</a><div>{{ hit.text }}</div></div>
+    <a class="hit" href="{% url 'watch' hit.video_id %}#t={{ hit.start }}"><span class="time">{{ hit.start|floatformat:0 }}s</span><span><b style="color:var(--text)">{{ hit.title }}</b><br><span class="muted">{{ hit.text }}</span></span></a>
   {% empty %}<p class="muted">Nothing found.</p>{% endfor %}
+  </div>
 {% endif %}
 {% endblock %}

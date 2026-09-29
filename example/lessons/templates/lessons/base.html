@@ -1,36 +1,27 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}vidlock demo{% endblock %}</title>
-  <style>
-    :root { --ink:#1b1f24; --muted:#5f6b76; --line:#e3e7eb; --accent:#0b6bcb; --bg:#f6f8fa; }
-    * { box-sizing: border-box; }
-    body { margin:0; font:16px/1.5 system-ui, sans-serif; color:var(--ink); background:var(--bg); }
-    header { background:#fff; border-bottom:1px solid var(--line); }
-    header div, main { max-width:960px; margin:0 auto; padding:14px 16px; }
-    header div { display:flex; justify-content:space-between; align-items:center; }
-    a { color:var(--accent); text-decoration:none; }
-    .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:18px; margin:16px 0; }
-    .muted { color:var(--muted); font-size:14px; }
-    .pill { display:inline-block; font-size:12px; padding:2px 8px; border-radius:99px; background:#e8f1fb; color:var(--accent); }
-    .pill.warn { background:#fdf1e6; color:#a15c00; }
-    button, input[type=submit] { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:8px 14px; font:inherit; cursor:pointer; }
-    ul.messages { list-style:none; padding:0; } ul.messages li { background:#eaf6ec; border:1px solid #cde8d2; padding:8px 12px; border-radius:8px; }
-    table { width:100%; border-collapse:collapse; } td, th { text-align:left; padding:8px; border-bottom:1px solid var(--line); }
-  </style>
+  <link rel="stylesheet" href="{% static 'lessons/theme.css' %}">
 </head>
 <body>
-<header><div>
-  <a href="{% url 'lessons' %}"><strong>vidlock demo</strong></a>
+<div class="sky"><canvas id="sky"></canvas></div>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="{% url 'lessons' %}"><span class="brand-mark"></span>vidlock</a>
   {% if user.is_authenticated %}
-    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<span class="muted">{{ user.get_username }}</span> <button>Sign out</button></form>
+    <form class="nav-search" method="get" action="{% url 'search' %}"><input type="search" name="q" value="{{ query|default:'' }}" placeholder="Search inside every lesson…"></form>
+    <form class="nav-user" method="post" action="{% url 'logout' %}">{% csrf_token %}
+      <span>{{ user.get_username }}{% if user.is_staff %} · teacher{% endif %}</span>
+      <button class="beam small"><span>Sign out</span></button>
+    </form>
   {% endif %}
-</div></header>
+</div></nav>
 <main>
   {% if messages %}<ul class="messages">{% for m in messages %}<li>{{ m }}</li>{% endfor %}</ul>{% endif %}
   {% block content %}{% endblock %}
 </main>
+<script src="{% static 'lessons/constellation.js' %}" defer></script>
 </body>
 </html>

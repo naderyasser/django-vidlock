@@ -1,25 +1,35 @@
 {% extends 'lessons/base.html' %}
 {% load vidlock %}
-{% block title %}{{ lesson.title }}{% endblock %}
+{% block title %}{{ lesson.title }} · vidlock{% endblock %}
 {% block content %}
+<div class="eyebrow">Lesson</div>
 <h1>{{ lesson.title }}</h1>
-<video id="player" controls playsinline style="width:100%;background:#000;border-radius:10px"></video>
-<p id="status" class="muted"></p>
-<div class="card muted">
-  Try it: open DevTools → Network and look at the <code>key</code> requests (sealed to this page, not the key);
-  open this lesson in another browser signed in as the same user (this one stops);
-  fullscreen it (the watermark stays).
+<div class="card player-shell">
+  <video id="player" controls playsinline style="width:100%"></video>
+  <p id="status" class="status"></p>
 </div>
 {% if has_transcript %}
 <div class="card">
-  <form method="get"><input name="q" value="{{ query }}" placeholder="Search what is said in this lesson…" style="width:70%;padding:8px;border:1px solid var(--line);border-radius:8px"> <button>Search</button></form>
+  <div class="eyebrow">Search this lesson</div>
+  <form method="get" class="row" style="margin-top:10px">
+    <input type="search" name="q" value="{{ query }}" placeholder="A word the teacher said…">
+    <button class="beam"><span>Find</span></button>
+  </form>
   {% if query %}
+    <div style="margin-top:14px">
     {% for hit in hits %}
-      <p><button type="button" onclick="player.seek({{ hit.start }})">▶ {{ hit.start|floatformat:0 }} s</button> {{ hit.text }}</p>
+      <div class="hit"><button type="button" class="beam small" onclick="player.seek({{ hit.start }})"><span>▶ {{ hit.start|floatformat:0 }}s</span></button><div>{{ hit.text }}</div></div>
     {% empty %}<p class="muted">Not said in this lesson.</p>{% endfor %}
+    </div>
   {% endif %}
 </div>
 {% endif %}
+<div class="card muted">
+  <div class="eyebrow" style="margin-bottom:6px">Try to break it</div>
+  DevTools → Network: the <code>key</code> requests carry a blob sealed to this page, not the key.
+  Open this lesson in another browser as the same student: this one stops.
+  Fullscreen it: the watermark (name, code, time) stays.
+</div>
 {% vidlock_player %}
 <script>
   window.player = VidLock.attach(document.getElementById('player'), {

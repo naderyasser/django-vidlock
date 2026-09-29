@@ -1,32 +1,33 @@
 {% extends 'lessons/base.html' %}
-{% block title %}Who watched {{ lesson.title }}{% endblock %}
+{% block title %}Who watched {{ lesson.title }} · vidlock{% endblock %}
 {% block content %}
-<h1>Who watched “{{ lesson.title }}”</h1>
+<div class="eyebrow">Teacher report</div>
+<h1>Who watched <em>{{ lesson.title }}</em></h1>
 <div class="card">
-  <strong>{{ data.viewers }}</strong> viewers ·
-  <strong>{{ data.completed }}</strong> finished ·
-  <strong>{% widthratio data.average_completion 1 100 %}%</strong> watched on average ·
-  <strong>{{ data.seconds_watched|floatformat:0 }}</strong> seconds in all
-  <div style="display:flex;align-items:flex-end;gap:2px;height:120px;margin-top:16px">
-    {% for bar in bars %}<div title="{{ bar.at }} — played {{ bar.count }}×" style="flex:1;background:#0b6bcb;opacity:.85;height:{{ bar.height }}%;min-height:2px;border-radius:2px 2px 0 0"></div>{% endfor %}
+  <div class="stats">
+    <div class="stat"><b>{{ data.viewers }}</b><span>viewers</span></div>
+    <div class="stat"><b>{{ data.completed }}</b><span>finished</span></div>
+    <div class="stat"><b>{% widthratio data.average_completion 1 100 %}%</b><span>watched on average</span></div>
+    <div class="stat"><b>{{ data.seconds_watched|floatformat:0 }}s</b><span>watched in all</span></div>
   </div>
-  <div class="muted">Each bar is {{ data.bucket_seconds }} seconds of the lesson; taller means played more.</div>
+  <div class="heat">{% for bar in bars %}<div title="{{ bar.at }} — played {{ bar.count }}×" style="height:{{ bar.height }}%"></div>{% endfor %}</div>
+  <div class="muted">Each bar is {{ data.bucket_seconds }} seconds of the lesson. Taller means played more.</div>
 </div>
 <div class="card">
-  <h3>What to do next</h3>
-  {% if insights.not_started %}<p><strong>{{ insights.not_started|length }}</strong> haven't started: {{ insights.not_started|join:", " }}</p>{% endif %}
-  {% if insights.stalled %}<p><strong>{{ insights.stalled|length }}</strong> stopped and haven't come back for a week: {{ insights.stalled|join:", " }}</p>{% endif %}
-  {% if insights.drop_off_at is not None %}<p>Most who stop, stop around <strong>{{ insights.drop_off_at }} s</strong>.</p>{% endif %}
-  {% for at, ratio in insights.confusing %}<p>The part at <strong>{{ at }} s</strong> is replayed {{ ratio }}× more than the rest: worth explaining again?</p>{% endfor %}
+  <div class="eyebrow" style="margin-bottom:6px">What to do next</div>
+  {% if insights.not_started %}<div class="insight"><span class="dot"></span><div><b>{{ insights.not_started|length }}</b> haven't started: {{ insights.not_started|join:", " }}</div></div>{% endif %}
+  {% if insights.stalled %}<div class="insight"><span class="dot"></span><div><b>{{ insights.stalled|length }}</b> stopped and haven't come back for a week: {{ insights.stalled|join:", " }}</div></div>{% endif %}
+  {% if insights.drop_off_at is not None %}<div class="insight"><span class="dot gold"></span><div>Most who stop, stop around <b>{{ insights.drop_off_at }}s</b>.</div></div>{% endif %}
+  {% for at, ratio in insights.confusing %}<div class="insight"><span class="dot gold"></span><div>The part at <b>{{ at }}s</b> is replayed {{ ratio }}× more than the rest. Worth explaining again?</div></div>{% endfor %}
   {% if not insights.not_started and not insights.stalled and insights.drop_off_at is None and not insights.confusing %}<p class="muted">Nothing needs your attention yet.</p>{% endif %}
-  <p class="muted">Daily, by email or WhatsApp: <code>manage.py vidlock_insights --send --nudge</code></p>
+  <p class="muted" style="margin-top:12px">Daily, by email or WhatsApp: <code>manage.py vidlock_insights --send --nudge</code></p>
 </div>
 <div class="card">
   <table>
-    <tr><th>Viewer</th><th>Watched</th><th>Stopped at</th><th>Last seen</th></tr>
+    <tr><th>Viewer</th><th>Watched</th><th></th><th>Stopped at</th><th>Last seen</th></tr>
     {% for row in rows %}
-      <tr><td>{{ row.user }}</td><td>{% widthratio row.completion 1 100 %}%</td><td>{{ row.position|floatformat:0 }} s</td><td>{{ row.last_seen|timesince }} ago</td></tr>
-    {% empty %}<tr><td colspan="4" class="muted">Nobody yet: watch the lesson as the student, then come back.</td></tr>{% endfor %}
+      <tr><td>{{ row.user }}</td><td>{% widthratio row.completion 1 100 %}%</td><td><div class="bar"><i style="width:{% widthratio row.completion 1 100 %}%"></i></div></td><td>{{ row.position|floatformat:0 }}s</td><td class="muted">{{ row.last_seen|timesince }} ago</td></tr>
+    {% empty %}<tr><td colspan="5" class="muted">Nobody yet: watch the lesson as the student, then come back.</td></tr>{% endfor %}
   </table>
 </div>
 {% endblock %}

@@ -51,7 +51,7 @@ class DemoTests(TestCase):
         )
         self.client.login(username='teacher', password='demo')
         page = self.client.get(f'/lessons/{self.lesson.pk}/report/')
-        self.assertContains(page, '<strong>1</strong> viewers')
+        self.assertContains(page, '<b>1</b><span>viewers</span>', html=False)
         self.assertContains(page, 'student')
 
 

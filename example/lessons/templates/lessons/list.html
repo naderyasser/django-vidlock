@@ -1,22 +1,33 @@
 {% extends 'lessons/base.html' %}
 {% block content %}
-<h1>Lessons</h1>
-<form method="get" action="{% url 'search' %}"><input name="q" placeholder="Search inside every lesson…" style="width:60%;padding:8px;border:1px solid var(--line);border-radius:8px"> <button>Search</button></form>
+<div class="eyebrow">Your course</div>
+<h1>Lessons that stay <em>yours</em>.</h1>
+<div class="grid">
 {% for lesson in lessons %}
-  <div class="card">
-    <a href="{% url 'watch' lesson.pk %}"><strong>{{ lesson.title }}</strong></a>
-    {% if lesson.is_sealed %}<span class="pill">sealed · {{ lesson.key_count }} key{{ lesson.key_count|pluralize }}</span>
-    {% else %}<span class="pill warn">{{ lesson.sealed_state|default:"not sealed" }}</span>{% endif %}
-    {% if user.is_staff %} · <a href="{% url 'report' lesson.pk %}">who watched</a>{% endif %}
+  <div class="card lesson-card">
+    <a class="title" href="{% url 'watch' lesson.pk %}">{{ lesson.title }}</a>
+    <div class="row">
+      {% if lesson.is_sealed %}<span class="pill ok">sealed · {{ lesson.key_count }} key{{ lesson.key_count|pluralize }}</span>
+      {% else %}<span class="pill warn">{{ lesson.sealed_state|default:"not sealed" }}</span>{% endif %}
+    </div>
     {% if lesson.sealed_error %}<div class="muted">{{ lesson.sealed_error }}</div>{% endif %}
+    <div class="row" style="margin-top:auto">
+      <a class="beam small" href="{% url 'watch' lesson.pk %}"><span>Watch ▶</span></a>
+      {% if user.is_staff %}<a class="muted" href="{% url 'report' lesson.pk %}">who watched →</a>{% endif %}
+    </div>
   </div>
 {% empty %}
-  <p class="muted">No lessons yet. Run <code>python manage.py demo</code>, or upload one below as a staff user.</p>
+  <p class="muted">No lessons yet. Run <code>python manage.py demo</code>{% if user.is_staff %}, or upload one below{% endif %}.</p>
 {% endfor %}
+</div>
 {% if user.is_staff %}
-  <div class="card">
+  <div class="card" style="margin-top:28px">
+    <div class="eyebrow">Teacher</div>
     <h3>Upload a lesson</h3>
-    <form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<input type="submit" value="Upload and seal"></form>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}
+      {{ form.as_p }}
+      <button class="beam"><span>Upload and seal</span></button>
+    </form>
   </div>
 {% endif %}
 {% endblock %}

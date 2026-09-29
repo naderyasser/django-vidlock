@@ -1,8 +1,15 @@
 {% extends 'lessons/base.html' %}
+{% block title %}Sign in · vidlock{% endblock %}
 {% block content %}
-<div class="card" style="max-width:380px;margin:40px auto">
-  <h2>Sign in</h2>
-  <p class="muted">After <code>manage.py demo</code>: <b>teacher</b> / <b>demo</b> or <b>student</b> / <b>demo</b>.</p>
-  <form method="post">{% csrf_token %}{{ form.as_p }}<input type="submit" value="Sign in"></form>
+<div class="center">
+  <div class="card" style="width:min(400px,100%)">
+    <div class="eyebrow">vidlock demo</div>
+    <h1 style="font-size:30px">Protected lessons, <em>watched</em>.</h1>
+    <p class="muted">After <code>manage.py demo</code>: <b>student</b> / <b>demo</b> to watch, <b>teacher</b> / <b>demo</b> for reports.</p>
+    <form method="post">{% csrf_token %}
+      {{ form.as_p }}
+      <button class="beam"><span>Sign in →</span></button>
+    </form>
+  </div>
 </div>
 {% endblock %}
