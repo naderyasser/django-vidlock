@@ -112,3 +112,28 @@ msgstr "غير مسموح"
 
 msgid "Too many requests."
 msgstr "طلبات كثيرة جدًا."
+
+#, python-format
+msgid "The file is %(size)s MB; the limit is %(limit)s MB."
+msgstr "حجم الملف %(size)s ميجابايت، والحد الأقصى %(limit)s ميجابايت."
+
+msgid "Upload an MP4, M4V or MOV video."
+msgstr "ارفع فيديو MP4 أو M4V أو MOV."
+
+msgid "The file is empty."
+msgstr "الملف فارغ."
+
+msgid "This upload has expired. Choose the file again."
+msgstr "انتهت صلاحية هذا الرفع. اختر الملف مرة أخرى."
+
+msgid "The upload did not finish. Choose the file again."
+msgstr "لم يكتمل الرفع. اختر الملف مرة أخرى."
+
+msgid "This upload has already been used."
+msgstr "تم استخدام هذا الرفع من قبل."
+
+msgid "Sign in to upload."
+msgstr "سجّل الدخول لرفع الفيديو."
+
+msgid "You may not upload videos."
+msgstr "غير مسموح لك برفع الفيديوهات."

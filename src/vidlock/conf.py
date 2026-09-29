@@ -115,6 +115,12 @@ DEFAULTS: dict[str, Any] = {
     'WHATSAPP_TEMPLATE': '',
     'WHATSAPP_TEMPLATE_LANGUAGE': 'ar',
     'WHATSAPP_API_VERSION': 'v21.0',
+    # Direct uploads (vidlock.uploads): the largest file a browser may put in
+    # the bucket, the folder new uploads go to, and how long the signed PUT
+    # URL works. The bucket's CORS must allow PUT from your site.
+    'MAX_UPLOAD_BYTES': 8 * 1024**3,
+    'UPLOAD_PREFIX': 'uploads/',
+    'UPLOAD_TTL': 3600,
     # Record who watched what (vidlock.progress, the WatchProgress model) from
     # the player's heartbeat.
     'TRACK_PROGRESS': True,

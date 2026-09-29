@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from lessons.backend import LessonBackend
 from lessons.models import Lesson
-from vidlock import insights, progress, transcribe
+from vidlock import insights, progress, transcribe, uploads
 from vidlock.models import Transcript, WatchProgress
 from vidlock.pipeline import seal_later
 from vidlock.storage import default_storage
@@ -18,7 +18,11 @@ from vidlock.views import playback_info
 
 class UploadForm(forms.Form):
     title = forms.CharField(max_length=200)
-    video = forms.FileField(help_text='An MP4 or MOV in H.264 — most phones and screen recorders.')
+    # With JavaScript the file goes straight to the bucket (vidlock.uploads)
+    # and only a ticket comes here; without it, the file comes the old way.
+    video = forms.FileField(
+        required=False, help_text='An MP4 or MOV in H.264 — most phones and screen recorders.'
+    )
 
 
 @login_required
@@ -26,10 +30,20 @@ def lesson_list(request):
     form = UploadForm()
     if request.method == 'POST' and request.user.is_staff:
         form = UploadForm(request.POST, request.FILES)
+        key = None
         if form.is_valid():
-            upload = form.cleaned_data['video']
-            extension = os.path.splitext(upload.name)[1].lower() or '.mp4'
-            key = default_storage().save_upload(upload, f'uploads/{uuid.uuid4().hex}{extension}')
+            if request.POST.get('vidlock_ticket'):
+                try:
+                    key = uploads.finish(request.user, request.POST['vidlock_ticket'])
+                except uploads.UploadRefused as exc:
+                    form.add_error('video', str(exc))
+            elif form.cleaned_data['video']:
+                upload = form.cleaned_data['video']
+                extension = os.path.splitext(upload.name)[1].lower() or '.mp4'
+                key = default_storage().save_upload(upload, f'uploads/{uuid.uuid4().hex}{extension}')
+            else:
+                form.add_error('video', 'Choose a video.')
+        if form.is_valid() and key:
             lesson = Lesson.objects.create(title=form.cleaned_data['title'])
             # Seals inline after the commit here; a real site sets
             # VIDLOCK['ENQUEUE_SEAL'] to hand it to Celery or Django Tasks.

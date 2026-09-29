@@ -157,6 +157,15 @@ td { padding: 10px 8px; border-top: 1px solid var(--border); }
 .bar { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); overflow: hidden; min-width: 90px; }
 .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--sky), var(--gold)); }
 
+/* Direct upload progress */
+.upload-progress { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border: 0; border-radius: 99px; overflow: hidden; background: rgba(255, 255, 255, 0.06); margin: 4px 0 12px; }
+.upload-progress::-webkit-progress-bar { background: rgba(255, 255, 255, 0.06); }
+.upload-progress::-webkit-progress-value { background: linear-gradient(90deg, var(--sky), var(--gold)); box-shadow: 0 0 12px rgba(230, 200, 121, 0.5); transition: width 0.2s; }
+.upload-progress::-moz-progress-bar { background: linear-gradient(90deg, var(--sky), var(--gold)); }
+.upload-error { color: var(--danger); font-size: 13px; margin: 0 0 10px; }
+.upload-error:empty { display: none; }
+.errorlist { list-style: none; padding: 0; margin: 0 0 8px; color: var(--danger); font-size: 13px; }
+
 ul.messages { list-style: none; padding: 0; margin: 0 0 16px; }
 ul.messages li { padding: 10px 14px; border: 1px solid rgba(230, 200, 121, 0.3); border-radius: 10px; color: var(--gold); background: rgba(230, 200, 121, 0.06); }
 .center { display: grid; place-items: center; min-height: 70vh; }

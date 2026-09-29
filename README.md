@@ -505,10 +505,13 @@ signed URL is still the only way in; CORS only lets the browser read the
 answer.
 
 ```json
-[{"AllowedOrigins": ["https://your-site.example"], "AllowedMethods": ["GET", "HEAD"],
-  "AllowedHeaders": ["range"], "ExposeHeaders": ["content-length", "content-range"],
+[{"AllowedOrigins": ["https://your-site.example"], "AllowedMethods": ["GET", "HEAD", "PUT"],
+  "AllowedHeaders": ["range", "content-type"], "ExposeHeaders": ["content-length", "content-range", "etag"],
   "MaxAgeSeconds": 3600}]
 ```
+
+(`PUT` and `content-type` are for [direct uploads](#uploads-straight-to-the-bucket);
+leave them out if you don't use them.)
 
 **Google Cloud Storage, Azure Blob, or any Django storage:**
 
@@ -522,7 +525,48 @@ VIDLOCK = {..., 'STORAGE': 'vidlock.storage.DjangoStorage', 'DJANGO_STORAGE': 'v
 ```
 
 **Anything else:** write a class with `download`, `upload`, `signed_url` and
-`delete` (see `vidlock/storage.py`) and point `STORAGE` at it.
+`delete` (see `vidlock/storage.py`) and point `STORAGE` at it. Add
+`upload_target` and `size` for direct uploads.
+
+## Uploads straight to the bucket
+
+A 2 GB lesson posted through Django ties up a worker for minutes and needs a
+disk to hold it. With direct uploads Django only signs: the browser sends
+the file to the bucket itself, with a progress bar, and your form receives a
+ticket in place of the file.
+
+```python
+# urls.py: vidlock.urls already has the endpoint (vidlock:upload)
+path('video/', include('vidlock.urls')),
+
+# views.py
+from vidlock import uploads
+from vidlock.pipeline import seal_later
+
+key = uploads.finish(request.user, request.POST['vidlock_ticket'])  # raises UploadRefused
+seal_later(lesson, key)
+```
+
+```html
+<form method="post" data-vidlock-upload="{% url 'vidlock:upload' %}">
+  {% csrf_token %} {{ form }}   <!-- with an <input type="file"> -->
+  <progress hidden></progress> <p data-vidlock-upload-error></p>
+  <button>Upload</button>
+</form>
+<script src="{% static 'vidlock/upload.js' %}" defer></script>
+```
+
+On submit, `upload.js` asks vidlock for a signed PUT URL, sends the file to
+the bucket and posts the form with a `vidlock_ticket` field instead of the
+file. Without JavaScript, the form posts the file as before.
+
+* Only MP4, M4V and MOV, up to `MAX_UPLOAD_BYTES` (8 GB by default). A
+  presigned PUT cannot cap the size, so `finish` checks it and deletes an
+  oversize object.
+* The ticket is signed, belongs to the user it was given to, and works once.
+* `SealedBackend.can_upload(user)` decides who may upload (staff by default).
+* Works with S3, R2, MinIO and the development storage. The bucket's CORS
+  needs `PUT` and `content-type` (see [Storage](#storage)).
 
 ## Mobile apps
 
@@ -680,6 +724,11 @@ they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 ## Upgrading
 
+**From 0.6 to 0.7**
+
+* Nothing to migrate. Direct uploads are opt-in: add `upload.js` to a form.
+  For S3 or R2, add `PUT` and `content-type` to the bucket's CORS.
+
 **From 0.5 to 0.6**
 
 * Run `manage.py migrate`, which adds the `Transcript` table.
@@ -801,6 +850,9 @@ MIT © Nader Yasser. The bundled hls.js is © Dailymotion, Apache-2.0 (see
   وسفاري والآيفون، والأبلكيشن بـExoPlayer أو AVPlayer.
 - **أي تخزين:** Cloudflare R2 وS3 وMinIO وB2، أو Google Cloud وAzure عن طريق
   django-storages.
+- **الرفع مباشرةً من المتصفح للباكت:** فيديو ٢ جيجا مابيعدّيش على سيرفر
+  Django خالص. المدرّس بيشوف شريط تقدّم، والسيرفر بيوقّع ويتأكد من الحجم
+  والنوع بس. سطرين في الفورم (`data-vidlock-upload` و`upload.js`).
 - **أدوات تشغيل:** أوامر `vidlock_seal` و`vidlock_status` و`vidlock_rewrap`
   و`vidlock_export` و`vidlock_trace` و`vidlock_risk`، وإجراء «تشفير مرة أخرى» في لوحة الأدمن، وفحوصات
   `manage.py check`.

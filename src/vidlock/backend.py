@@ -30,6 +30,11 @@ class SealedBackend:
         """Whether ``user`` may watch ``video`` right now."""
         raise NotImplementedError
 
+    def can_upload(self, user) -> bool:
+        """Whether ``user`` may upload videos straight to the bucket
+        (``vidlock.uploads``). Default: staff."""
+        return bool(user.is_staff)
+
     def namespace(self, request) -> str:
         """Keeps fetch counters apart when one cache serves several sites or
         tenants whose ids may collide. Return e.g. the tenant's schema name."""

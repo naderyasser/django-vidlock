@@ -68,8 +68,14 @@ def extract_audio(source: str, out_path: str) -> str:
         check=False, capture_output=True, text=True, timeout=packager.TIMEOUT_SECONDS,
     )  # fmt: skip
     if run.returncode:
+        if 'does not contain any stream' in run.stderr or 'matches no streams' in run.stderr:
+            raise NoAudio(source)
         raise packager.PackagingError(f'ffmpeg could not extract audio: {run.stderr.strip()[-200:]}')
     return out_path
+
+
+class NoAudio(packager.PackagingError):
+    """The video has no sound: nothing to transcribe."""
 
 
 def transcriber():

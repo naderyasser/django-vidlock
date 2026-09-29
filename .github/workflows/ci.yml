@@ -105,6 +105,7 @@ jobs:
         run: |
           unzip -l dist/*.whl | tee /tmp/wheel.txt
           grep -q 'vidlock/static/vidlock/player.js' /tmp/wheel.txt
+          grep -q 'vidlock/static/vidlock/upload.js' /tmp/wheel.txt
           grep -q 'vidlock/static/vidlock/vendor/hls.light.min.js' /tmp/wheel.txt
           grep -q 'vidlock/locale/ar/LC_MESSAGES/django.mo' /tmp/wheel.txt
           grep -q 'vidlock/py.typed' /tmp/wheel.txt

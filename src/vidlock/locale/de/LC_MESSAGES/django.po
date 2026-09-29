@@ -112,3 +112,28 @@ msgstr "Verboten"
 
 msgid "Too many requests."
 msgstr "Zu viele Anfragen."
+
+#, python-format
+msgid "The file is %(size)s MB; the limit is %(limit)s MB."
+msgstr "Die Datei ist %(size)s MB groß; erlaubt sind %(limit)s MB."
+
+msgid "Upload an MP4, M4V or MOV video."
+msgstr "Lade ein MP4-, M4V- oder MOV-Video hoch."
+
+msgid "The file is empty."
+msgstr "Die Datei ist leer."
+
+msgid "This upload has expired. Choose the file again."
+msgstr "Dieser Upload ist abgelaufen. Wähle die Datei erneut."
+
+msgid "The upload did not finish. Choose the file again."
+msgstr "Der Upload wurde nicht abgeschlossen. Wähle die Datei erneut."
+
+msgid "This upload has already been used."
+msgstr "Dieser Upload wurde bereits verwendet."
+
+msgid "Sign in to upload."
+msgstr "Melde dich zum Hochladen an."
+
+msgid "You may not upload videos."
+msgstr "Du darfst keine Videos hochladen."

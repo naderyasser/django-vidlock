@@ -1,12 +1,11 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-fancy-pypi-readme>=22.5"]
 build-backend = "hatchling.build"
 
 [project]
 name = "django-vidlock"
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 description = "Protect course videos in Django: encrypted single-file HLS, per-viewer keys, no DRM licence, no re-encoding."
-readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [{ name = "Nader Yasser", email = "naderyasser023@gmail.com" }]
@@ -61,6 +60,22 @@ Security = "https://github.com/naderyasser/django-vidlock/security/policy"
 
 [tool.hatch.version]
 path = "src/vidlock/__init__.py"
+
+# PyPI shows the README without the repository around it: point its images
+# and relative links at GitHub.
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = 'src="(docs/[^"]+)"'
+replacement = 'src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/\1"'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((?!https?://|#|mailto:)([^)]+)\)'
+replacement = '](https://github.com/naderyasser/django-vidlock/blob/main/\1)'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vidlock"]

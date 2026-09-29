@@ -54,6 +54,49 @@ class DemoTests(TestCase):
         self.assertContains(page, '<b>1</b><span>viewers</span>', html=False)
         self.assertContains(page, 'student')
 
+    def test_the_teacher_uploads_straight_to_the_bucket(self):
+        import os
+        import subprocess
+
+        clip = os.path.join(TMP, 'clip.mp4')
+        subprocess.run(
+            [
+                'ffmpeg',
+                '-v',
+                'error',
+                '-y',
+                '-f',
+                'lavfi',
+                '-i',
+                'testsrc=duration=3:size=160x120:rate=25',
+                '-c:v',
+                'libx264',
+                '-pix_fmt',
+                'yuv420p',
+                clip,
+            ],
+            check=True,
+        )
+        with open(clip, 'rb') as fh:
+            data = fh.read()
+        self.client.login(username='teacher', password='demo')
+        self.assertContains(self.client.get('/'), 'data-vidlock-upload')
+        started = self.client.post(
+            '/video/upload',
+            json.dumps({'name': 'clip.mp4', 'size': len(data)}),
+            content_type='application/json',
+        ).json()
+        put = self.client.generic('PUT', started['url'], data, content_type='video/mp4')
+        self.assertEqual(put.status_code, 200)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post('/', {'title': 'Uploaded', 'vidlock_ticket': started['ticket']})
+        self.assertRedirects(response, '/')
+        self.assertTrue(Lesson.objects.get(title='Uploaded').is_sealed)
+        # The ticket works once.
+        again = self.client.post('/', {'title': 'Twice', 'vidlock_ticket': started['ticket']})
+        self.assertContains(again, 'already been used')
+        self.assertFalse(Lesson.objects.filter(title='Twice').exists())
+
 
 class DemoFeatureTests(TestCase):
     """Search and insights, with a transcript stored directly (no model needed)."""

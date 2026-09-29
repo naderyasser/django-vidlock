@@ -109,3 +109,28 @@ msgstr "Yasak"
 
 msgid "Too many requests."
 msgstr "Çok fazla istek."
+
+#, python-format
+msgid "The file is %(size)s MB; the limit is %(limit)s MB."
+msgstr "Dosya %(size)s MB; sınır %(limit)s MB."
+
+msgid "Upload an MP4, M4V or MOV video."
+msgstr "MP4, M4V veya MOV video yükleyin."
+
+msgid "The file is empty."
+msgstr "Dosya boş."
+
+msgid "This upload has expired. Choose the file again."
+msgstr "Bu yüklemenin süresi doldu. Dosyayı yeniden seçin."
+
+msgid "The upload did not finish. Choose the file again."
+msgstr "Yükleme tamamlanmadı. Dosyayı yeniden seçin."
+
+msgid "This upload has already been used."
+msgstr "Bu yükleme zaten kullanıldı."
+
+msgid "Sign in to upload."
+msgstr "Yüklemek için giriş yapın."
+
+msgid "You may not upload videos."
+msgstr "Video yükleme izniniz yok."

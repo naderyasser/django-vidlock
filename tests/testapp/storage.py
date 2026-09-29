@@ -36,3 +36,21 @@ class LiveStorage(MemoryStorage):
     def signed_url(self, key, ttl):
         SIGNED.append((key, ttl))
         return f'{BASE["url"]}/bucket/{key}?sig=1'
+
+
+#: key -> content type for every upload target handed out.
+TARGETS = {}
+
+
+def _memory_upload_target(self, key, content_type, ttl):
+    TARGETS[key] = content_type
+    return {'url': f'https://bucket.example/{key}?put=1', 'headers': {'Content-Type': content_type}}
+
+
+def _memory_size(self, key):
+    found = OBJECTS.get(key)
+    return len(found[0]) if found else None
+
+
+MemoryStorage.upload_target = _memory_upload_target
+MemoryStorage.size = _memory_size

@@ -28,7 +28,7 @@ from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonRespon
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 
 from vidlock import (
@@ -43,6 +43,7 @@ from vidlock import (
     tokens,
     trace,
     transcribe,
+    uploads,
     wrap,
 )
 from vidlock.models import Transcript
@@ -344,3 +345,33 @@ def heartbeat_view(request, video_id):
         risk.note(user, 'tamper', namespace, request, once=found.lease or str(video_id))
     risk.stream_seen_from(user, found.lease, backend.client_ip(request), namespace, request)
     return JsonResponse({'ok': True, 'interval': int(conf.get('HEARTBEAT_SECONDS'))})
+
+
+@csrf_protect
+@require_POST
+def upload_view(request):
+    """Start a direct upload (``vidlock.uploads``): POST JSON ``{"name",
+    "size"}``, get back where to PUT the file and the ticket to finish with.
+    CSRF-protected even without the middleware; ``upload.js`` sends the token."""
+    user = request.user
+    if not user.is_authenticated:
+        return JsonResponse({'error': str(_UPLOAD_SIGN_IN)}, status=403)
+    backend_cls = conf.load('BACKEND')
+    allowed = backend_cls().can_upload(user) if backend_cls else user.is_staff
+    if not allowed:
+        return JsonResponse({'error': str(_UPLOAD_FORBIDDEN)}, status=403)
+    try:
+        body = json.loads(request.body or b'{}')
+    except ValueError:
+        body = {}
+    body = body if isinstance(body, dict) else {}
+    try:
+        return JsonResponse(uploads.start(user, str(body.get('name', '')), body.get('size')))
+    except uploads.UploadRefused as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    except NotImplementedError:
+        return JsonResponse({'error': 'This storage cannot take direct uploads.'}, status=501)
+
+
+_UPLOAD_SIGN_IN = gettext_lazy('Sign in to upload.')
+_UPLOAD_FORBIDDEN = gettext_lazy('You may not upload videos.')

@@ -109,3 +109,28 @@ msgstr "Proibido"
 
 msgid "Too many requests."
 msgstr "Pedidos demais."
+
+#, python-format
+msgid "The file is %(size)s MB; the limit is %(limit)s MB."
+msgstr "O arquivo tem %(size)s MB; o limite é %(limit)s MB."
+
+msgid "Upload an MP4, M4V or MOV video."
+msgstr "Envie um vídeo MP4, M4V ou MOV."
+
+msgid "The file is empty."
+msgstr "O arquivo está vazio."
+
+msgid "This upload has expired. Choose the file again."
+msgstr "Este envio expirou. Escolha o arquivo novamente."
+
+msgid "The upload did not finish. Choose the file again."
+msgstr "O envio não terminou. Escolha o arquivo novamente."
+
+msgid "This upload has already been used."
+msgstr "Este envio já foi usado."
+
+msgid "Sign in to upload."
+msgstr "Entre para enviar."
+
+msgid "You may not upload videos."
+msgstr "Você não pode enviar vídeos."

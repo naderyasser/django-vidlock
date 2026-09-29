@@ -1,4 +1,5 @@
 {% extends 'lessons/base.html' %}
+{% load static %}
 {% block content %}
 <div class="eyebrow">Your course</div>
 <h1>Lessons that stay <em>yours</em>.</h1>
@@ -24,10 +25,14 @@
   <div class="card" style="margin-top:28px">
     <div class="eyebrow">Teacher</div>
     <h3>Upload a lesson</h3>
-    <form method="post" enctype="multipart/form-data">{% csrf_token %}
+    <p class="muted">Straight from your browser to the bucket: the file never passes through Django.</p>
+    <form method="post" enctype="multipart/form-data" data-vidlock-upload="{% url 'vidlock:upload' %}">{% csrf_token %}
       {{ form.as_p }}
+      <progress class="upload-progress" hidden></progress>
+      <p class="upload-error" data-vidlock-upload-error></p>
       <button class="beam"><span>Upload and seal</span></button>
     </form>
+    <script src="{% static 'vidlock/upload.js' %}" defer></script>
   </div>
 {% endif %}
 {% endblock %}

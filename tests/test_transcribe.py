@@ -179,3 +179,18 @@ def test_real_speech_with_whisper(settings, tmp_path):
     assert seal(Lesson, lesson.pk, 'l/talk.mp4') == 'sealed'
     hits = transcribe.search('lens')
     assert hits and hits[0]['start'] < 3, Transcript.objects.get().segments
+
+
+def test_a_silent_video_has_nothing_to_transcribe(tmp_path):
+    from tests.conftest import HAS_FFMPEG
+
+    if not HAS_FFMPEG:
+        pytest.skip('ffmpeg is not installed')
+    ffmpeg = os.environ.get('VIDLOCK_TEST_FFMPEG', 'ffmpeg')
+    silent = tmp_path / 'silent.mp4'
+    subprocess.run(
+        [ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=duration=1:size=64x48:rate=10', str(silent)],
+        check=True,
+    )
+    with pytest.raises(transcribe.NoAudio):
+        transcribe.extract_audio(str(silent), str(tmp_path / 'out.wav'))

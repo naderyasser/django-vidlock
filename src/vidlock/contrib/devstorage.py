@@ -22,10 +22,12 @@ from django.core import signing
 from django.core.exceptions import ImproperlyConfigured
 from django.http import FileResponse, Http404, HttpResponse, StreamingHttpResponse
 from django.urls import path, reverse
+from django.views.decorators.csrf import csrf_exempt
 
 from vidlock.storage import Storage
 
 _SALT = 'vidlock.devstorage'
+_PUT_SALT = 'vidlock.devstorage.put'
 _RANGE = re.compile(r'^bytes=(\d+)-(\d*)$')
 CHUNK = 256 * 1024
 
@@ -72,6 +74,16 @@ class DevStorage(Storage):
             return True
         except (OSError, Http404):
             return False
+
+    def upload_target(self, key, content_type, ttl):
+        token = signing.dumps({'k': key, 'ttl': int(ttl)}, salt=_PUT_SALT)
+        return {'url': reverse('vidlock-dev:put', args=[token]), 'headers': {'Content-Type': content_type}}
+
+    def size(self, key):
+        try:
+            return os.path.getsize(_path(key))
+        except (OSError, Http404):
+            return None
 
     def save_upload(self, uploaded, key: str) -> str:
         """Store a Django ``UploadedFile`` (from a form) under ``key``."""
@@ -129,5 +141,32 @@ def media(request, token):
     return response
 
 
+@csrf_exempt  # the signed URL is the credential, as with a bucket's
+def put(request, token):
+    """Take a direct upload (``vidlock.uploads``) like a bucket's presigned PUT."""
+    _require_debug()
+    if request.method == 'OPTIONS':
+        return HttpResponse()
+    if request.method != 'PUT':
+        return HttpResponse(status=405)
+    try:
+        ttl = int(signing.loads(token, salt=_PUT_SALT)['ttl'])
+        key = signing.loads(token, salt=_PUT_SALT, max_age=ttl)['k']
+    except (signing.BadSignature, KeyError, TypeError, ValueError):
+        return HttpResponse('Expired or invalid link.', status=403)
+    target = _path(key)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, 'wb') as fh:
+        while True:
+            chunk = request.read(CHUNK)
+            if not chunk:
+                break
+            fh.write(chunk)
+    return HttpResponse(status=200)
+
+
 app_name = 'vidlock-dev'
-urlpatterns = [path('<str:token>', media, name='media')]
+urlpatterns = [
+    path('put/<str:token>', put, name='put'),
+    path('<str:token>', media, name='media'),
+]

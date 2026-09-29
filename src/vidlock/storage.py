@@ -1,6 +1,6 @@
 """Object storage: where the source is fetched from and the sealed file goes.
 
-Any class with these four methods works — set ``VIDLOCK['STORAGE']`` to
+Any class with the four methods below works — set ``VIDLOCK['STORAGE']`` to
 its dotted path. Two come with vidlock:
 
 * ``S3Storage`` (the default) speaks the S3 API through boto3: AWS S3,
@@ -43,6 +43,17 @@ class Storage:
     def delete(self, key: str) -> bool:
         """Remove an object. Must not raise: deleting a video should never fail
         because storage is briefly unreachable. Return whether it worked."""
+        raise NotImplementedError
+
+    # Optional: direct uploads from the browser (vidlock.uploads) need both.
+
+    def upload_target(self, key: str, content_type: str, ttl: int) -> dict:
+        """Where a browser PUTs the new object ``key``, as ``{'url': ...,
+        'headers': {...}}``; the URL works for ``ttl`` seconds."""
+        raise NotImplementedError
+
+    def size(self, key: str) -> int | None:
+        """The size of the object ``key`` in bytes, or None if there is none."""
         raise NotImplementedError
 
 
@@ -93,6 +104,26 @@ class S3Storage(Storage):
             return True
         except Exception:
             return False
+
+    def upload_target(self, key, content_type, ttl):
+        # A presigned PUT, not POST: Cloudflare R2 has no POST uploads. The
+        # size is checked after the upload instead (vidlock.uploads.finish).
+        url = self.client.generate_presigned_url(
+            'put_object',
+            Params={'Bucket': self.bucket, 'Key': key, 'ContentType': content_type},
+            ExpiresIn=min(int(ttl), MAX_SIGNED_TTL),
+        )
+        return {'url': url, 'headers': {'Content-Type': content_type}}
+
+    def size(self, key):
+        from botocore.exceptions import ClientError
+
+        try:
+            return int(self.client.head_object(Bucket=self.bucket, Key=key)['ContentLength'])
+        except ClientError as exc:
+            if exc.response.get('Error', {}).get('Code') in ('404', 'NoSuchKey', 'NotFound'):
+                return None
+            raise
 
 
 class DjangoStorage(Storage):
@@ -153,6 +184,9 @@ class DjangoStorage(Storage):
             return True
         except Exception:
             return False
+
+    def size(self, key):
+        return self.backend.size(key) if self.backend.exists(key) else None
 
 
 def default_storage():

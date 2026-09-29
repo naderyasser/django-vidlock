@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.7.0 — 2026-09-29
+
+### Uploads straight to the bucket
+
+* `vidlock.uploads`: the browser PUTs the video to the bucket with a
+  presigned URL; Django signs and checks, and never holds the file.
+  `uploads.start()` / `uploads.finish()`, the `vidlock:upload` endpoint
+  (CSRF-protected) and `static/vidlock/upload.js`, which turns a plain
+  Django form into a direct upload with a progress bar.
+* Tickets are signed, tied to their user and single-use; `finish` checks
+  the object exists and deletes one past `MAX_UPLOAD_BYTES`.
+* Storage classes gain the optional `upload_target()` and `size()`
+  (S3Storage, DjangoStorage for size, and the development storage, which
+  now takes PUT uploads). `SealedBackend.can_upload()`. New settings
+  `MAX_UPLOAD_BYTES`, `UPLOAD_PREFIX`, `UPLOAD_TTL`.
+
+### Fixes
+
+* A video without sound is sealed without a transcription error: there is
+  nothing to transcribe (`transcribe.NoAudio`).
+
+### Demo
+
+* Restyled after ThreeUI (MIT, Meng To), with motion throughout: an aurora
+  and constellation background, rising entrances, card spotlights and tilt,
+  magnetic buttons, a turning ring round the player, counting numbers and
+  growing charts, all off for reduced motion.
+* The teacher uploads straight to the (development) bucket with a progress
+  bar.
+* Screenshots and a GIF in the README.
+
 ## 0.6.0 — 2026-09-29
 
 ### Captions and search inside lessons

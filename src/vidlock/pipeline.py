@@ -114,6 +114,10 @@ def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = 
                 os.close(fd)
                 try:
                     transcribe.extract_audio(source, audio)
+                except transcribe.NoAudio:
+                    logger.info('%s %s has no sound; not transcribing it', model.__name__, pk)
+                    os.remove(audio)
+                    audio = None
                 except Exception:
                     logger.exception('audio for transcribing %s %s', model.__name__, pk)
                     os.remove(audio)
