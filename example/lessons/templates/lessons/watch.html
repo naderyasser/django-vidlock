@@ -1,0 +1,20 @@
+{% extends 'lessons/base.html' %}
+{% load vidlock %}
+{% block title %}{{ lesson.title }}{% endblock %}
+{% block content %}
+<h1>{{ lesson.title }}</h1>
+<video id="player" controls playsinline style="width:100%;background:#000;border-radius:10px"></video>
+<p id="status" class="muted"></p>
+<div class="card muted">
+  Try it: open DevTools → Network and look at the <code>key</code> requests (sealed to this page, not the key);
+  open this lesson in another browser signed in as the same user (this one stops);
+  fullscreen it (the watermark stays).
+</div>
+{% vidlock_player %}
+<script>
+  VidLock.attach(document.getElementById('player'), {
+    endpoint: '{% url "playback" lesson.pk %}',
+    onStatus: (message) => { document.getElementById('status').textContent = message || ''; },
+  });
+</script>
+{% endblock %}

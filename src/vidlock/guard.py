@@ -81,24 +81,42 @@ def check_key_fetch(
     return None
 
 
+#: How long a pace check waits for another request of the same viewer and
+#: video to finish its own (the bucket is read, changed and written back).
+LOCK_WAIT = 0.25
+
+
 def _paced(user_id, video_id, namespace, index, key_seconds) -> bool:
     burst = float(conf.get('KEY_BURST'))
     speed = float(conf.get('KEY_PACE') or 0)
     if speed <= 0:
         return True
     key = f'{_PREFIX}:pace:{namespace}:{user_id}:{video_id}'
-    now = time.time()
-    state = cache.get(key) or {'issued': [], 'tokens': burst, 'at': now}
-    if index in state['issued']:
+    # Parallel requests must not all read the same full bucket: take the
+    # bucket under a lock (cache.add is atomic in every Django cache). A
+    # player fetches keys one at a time, so waiting here is a tool's problem;
+    # one that cannot get the lock is refused and retried.
+    lock = f'{key}:lock'
+    deadline = time.monotonic() + LOCK_WAIT
+    while not cache.add(lock, 1, 5):
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.01)
+    try:
+        now = time.time()
+        state = cache.get(key) or {'issued': [], 'tokens': burst, 'at': now}
+        if index in state['issued']:
+            return True
+        interval = max(1.0, float(key_seconds) / speed)
+        tokens = min(burst, state['tokens'] + (now - state['at']) / interval)
+        if tokens < 1:
+            cache.set(key, {**state, 'tokens': tokens, 'at': now}, 6 * 3600)
+            return False
+        state = {'issued': [*state['issued'], index][-500:], 'tokens': tokens - 1, 'at': now}
+        cache.set(key, state, 6 * 3600)
         return True
-    interval = max(1.0, float(key_seconds) / speed)
-    tokens = min(burst, state['tokens'] + (now - state['at']) / interval)
-    if tokens < 1:
-        cache.set(key, {**state, 'tokens': tokens, 'at': now}, 6 * 3600)
-        return False
-    state = {'issued': [*state['issued'], index][-500:], 'tokens': tokens - 1, 'at': now}
-    cache.set(key, state, 6 * 3600)
-    return True
+    finally:
+        cache.delete(lock)
 
 
 def retry_after(key_seconds: float | None) -> int:

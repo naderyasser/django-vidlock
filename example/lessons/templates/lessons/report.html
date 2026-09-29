@@ -1,0 +1,23 @@
+{% extends 'lessons/base.html' %}
+{% block title %}Who watched {{ lesson.title }}{% endblock %}
+{% block content %}
+<h1>Who watched “{{ lesson.title }}”</h1>
+<div class="card">
+  <strong>{{ data.viewers }}</strong> viewers ·
+  <strong>{{ data.completed }}</strong> finished ·
+  <strong>{% widthratio data.average_completion 1 100 %}%</strong> watched on average ·
+  <strong>{{ data.seconds_watched|floatformat:0 }}</strong> seconds in all
+  <div style="display:flex;align-items:flex-end;gap:2px;height:120px;margin-top:16px">
+    {% for bar in bars %}<div title="{{ bar.at }} — played {{ bar.count }}×" style="flex:1;background:#0b6bcb;opacity:.85;height:{{ bar.height }}%;min-height:2px;border-radius:2px 2px 0 0"></div>{% endfor %}
+  </div>
+  <div class="muted">Each bar is {{ data.bucket_seconds }} seconds of the lesson; taller means played more.</div>
+</div>
+<div class="card">
+  <table>
+    <tr><th>Viewer</th><th>Watched</th><th>Stopped at</th><th>Last seen</th></tr>
+    {% for row in rows %}
+      <tr><td>{{ row.user }}</td><td>{% widthratio row.completion 1 100 %}%</td><td>{{ row.position|floatformat:0 }} s</td><td>{{ row.last_seen|timesince }} ago</td></tr>
+    {% empty %}<tr><td colspan="4" class="muted">Nobody yet: watch the lesson as the student, then come back.</td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

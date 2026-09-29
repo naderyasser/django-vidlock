@@ -205,3 +205,23 @@ class TestNativePlayers:
         request = RequestFactory().get('/')
         request.user = student
         assert playback_info(request, lesson)['duration'] == 15.0
+
+
+class TestTokenFormat:
+    def test_an_id_with_the_old_separator_cannot_shift_fields(self):
+        t = tokens.sign(5, '1|app||', tokens.WEB, 'acct', 'sess')
+        found = tokens.claims(t, 5)
+        assert found.user_id == '1|app||' and found.channel == tokens.WEB and found.session == 'sess'
+
+    def test_tokens_from_before_still_open(self):
+        from django.core.signing import TimestampSigner
+
+        legacy = TimestampSigner(salt='vidlock.token').sign('5|7|app|acct||L1')
+        assert tokens.claims(legacy, 5) == tokens.Claims('7', 'app', 'acct', '', 'L1')
+
+    def test_a_malformed_json_token_opens_nothing(self):
+        from django.core.signing import TimestampSigner
+
+        signer = TimestampSigner(salt='vidlock.token')
+        assert tokens.claims(signer.sign('[1,2]'), 1) is None
+        assert tokens.claims(signer.sign('["5",7,"app","","",""]'), 5) is None

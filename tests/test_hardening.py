@@ -5,6 +5,7 @@ import base64
 import datetime
 import io
 import json
+from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -89,12 +90,12 @@ class TestRotation:
             data = fh.read()
         # Each range opens with its own period's key, and only with that one.
         ranges = [line for line in playlist.splitlines() if line.startswith('#EXT-X-BYTERANGE')]
-        ivs = [line.rsplit('IV=0x', 1)[1] for line in playlist.splitlines() if line.startswith('#EXT-X-KEY')]
         for index, line in enumerate(ranges):
             length, offset = (int(n) for n in line.split(':')[1].split('@'))
             chunk = data[offset : offset + length]
+            # Each range: its period's key, and its own sequence number as IV.
             decryptor = Cipher(
-                algorithms.AES(blob[index * 16 : index * 16 + 16]), modes.CBC(bytes.fromhex(ivs[index]))
+                algorithms.AES(blob[index * 16 : index * 16 + 16]), modes.CBC(index.to_bytes(16, 'big'))
             ).decryptor()
             clear = decryptor.update(chunk) + decryptor.finalize()
             assert clear[0] == 0x47 and clear[188] == 0x47
@@ -396,3 +397,46 @@ def test_playback_info_hands_the_player_its_heartbeat(student, rotated):
     assert info['heartbeat_url'].startswith(f'http://testserver/sealed/{rotated.pk}/heartbeat?t=')
     assert info['key_exchange'] == 'ecdh-p256-v1' and info['heartbeat_interval'] == 30
     assert tokens.claims(token_of(info['key_url']), rotated.pk).lease
+
+
+class TestPaceUnderLoad:
+    def test_parallel_requests_cannot_share_one_bucket(self, rotated, student, settings):
+        """Many key requests at once, with a slow cache: only the burst gets through."""
+        import contextlib
+        import threading
+
+        from django.core.cache import caches
+
+        from vidlock import guard
+
+        settings.VIDLOCK = {**settings.VIDLOCK, 'KEY_BURST': 1}
+
+        together = threading.Barrier(3)
+
+        class SlowCache:
+            """The default cache (shared LocMem storage), where every read waits
+            until all three requests have read: the worst case for the race."""
+
+            def get(self, *args, **kwargs):
+                value = caches['default'].get(*args, **kwargs)
+                # Nobody writes back until everyone has read.
+                with contextlib.suppress(threading.BrokenBarrierError):
+                    together.wait(timeout=0.2)
+                return value
+
+            def __getattr__(self, name):
+                return getattr(caches['default'], name)
+
+        results = []
+        with mock.patch('vidlock.guard.cache', SlowCache()):
+            threads = [
+                threading.Thread(
+                    target=lambda i=i: results.append(guard._paced(student.pk, rotated.pk, '', i, 10))
+                )
+                for i in range(3)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        assert results.count(True) == 1, results

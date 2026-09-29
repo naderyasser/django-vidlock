@@ -118,3 +118,44 @@ def test_a_play_cut_into_pieces_by_heartbeats_still_counts(client, lesson, stude
     with mock.patch('vidlock.progress.time.time', return_value=now + 60):
         beat(client, lesson, student, watched=[[0, 9]])
     assert row(student, lesson).buckets == [2, 1]
+
+
+class TestHeartbeatAbuse:
+    """What the security review found, kept closed."""
+
+    def test_back_to_back_heartbeats_cannot_inflate_progress(self, client, lesson, student):
+        now = time.time()
+        for n in range(20):
+            with (
+                mock.patch('vidlock.progress.time.time', return_value=now + n * 1.01),
+                mock.patch('vidlock.views.time.time', return_value=now + n * 1.01),
+            ):
+                beat(client, lesson, student, watched=[[0, 25]])
+        got = row(student, lesson)
+        # First heartbeat's slack, plus 2.5x the ~19 s that really passed.
+        assert got.seconds_watched <= progress.SLACK + 19.2 * progress.MAX_SPEED + 0.01
+        assert got.seconds_watched < 20 * 25
+
+    def test_more_than_one_heartbeat_a_second_is_refused(self, client, lesson, student):
+        assert beat(client, lesson, student).status_code == 200
+        assert beat(client, lesson, student).status_code == 429
+
+    def test_a_web_token_needs_its_session(self, client, lesson, student):
+        t = tokens.sign(lesson.pk, student.pk, tokens.WEB, tokens.account_fingerprint(student), 'sess', 'L1')
+        answer = client.post(f'/sealed/{lesson.pk}/heartbeat?t={t}', '{}', content_type='application/json')
+        assert answer.status_code == 403
+
+    def test_revoked_access_stops_heartbeats(self, client, lesson, student):
+        lesson.students.clear()
+        answer = beat(client, lesson, student, watched=[[0, 10]])
+        assert answer.status_code == 403 and not WatchProgress.objects.exists()
+
+    def test_an_unsealed_video_takes_no_progress(self, client, lesson, student):
+        lesson.forget_seal()
+        lesson.save()
+        answer = beat(client, lesson, student, watched=[[1e12, 1e12 + 10]])
+        assert answer.status_code == 403 and not WatchProgress.objects.exists()
+
+    def test_stretches_past_the_end_are_dropped(self, client, lesson, student):
+        beat(client, lesson, student, watched=[[1e7, 1e7 + 10], [0, 10]])
+        assert row(student, lesson).buckets == [1]

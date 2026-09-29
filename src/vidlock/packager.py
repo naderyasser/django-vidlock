@@ -26,6 +26,7 @@ import re
 import secrets
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 
 from vidlock import conf
@@ -37,6 +38,10 @@ AUDIO_CODECS = frozenset({'aac', 'mp3'})
 #: 8-bit 4:2:0 — what browsers' and phones' H.264 decoders accept. An H.264
 #: file in 10-bit (High 10) or 4:2:2/4:4:4 plays in VLC and nowhere else.
 PIXEL_FORMATS = frozenset({'yuv420p', 'yuvj420p'})
+#: How every tool here opens an upload: as MP4/MOV and nothing else, from
+#: local disk only. An "MP4" whose bytes are an HLS playlist could otherwise
+#: make older ffmpeg builds fetch URLs or read other files and seal the result.
+SAFE_INPUT = ('-f', 'mov', '-protocol_whitelist', 'file')
 #: Containers worth probing. WebM/MKV hold VP8/VP9/AV1 far more often.
 SOURCE_EXTENSIONS = frozenset({'.mp4', '.m4v', '.mov'})
 
@@ -107,7 +112,7 @@ def probe(path: str) -> Probe:
     if not binary:
         raise PackagingError('ffmpeg is not installed')
     run = subprocess.run(
-        [binary, '-hide_banner', '-nostdin', '-i', path],
+        [binary, '-hide_banner', '-nostdin', *SAFE_INPUT, '-i', path],
         check=False,  # ffmpeg -i with no output always exits 1; stderr is the answer
         capture_output=True,
         text=True,
@@ -139,6 +144,7 @@ def _probe_json(ffprobe: str, path: str) -> Probe:
             'stream=codec_type,codec_name,profile,pix_fmt:format=duration',
             '-of',
             'json',
+            *SAFE_INPUT,
             path,
         ],
         check=False,
@@ -187,6 +193,7 @@ def _remux(binary: str, source: str, out_dir: str) -> str:
             '-loglevel',
             'error',
             '-nostdin',
+            *SAFE_INPUT,
             '-i',
             source,
             '-map',
@@ -265,6 +272,10 @@ def package(source: str, workdir: str) -> tuple[str, str, bytes]:
     offset = 0  # read position in the clear file
     written = 0
     pending_duration = None
+    ranges = 0
+    first_sequence = next(
+        (int(line.split(':', 1)[1]) for line in lines if line.startswith('#EXT-X-MEDIA-SEQUENCE:')), 0
+    )
     with open(clear_path, 'rb') as clear, open(ts_path, 'wb') as sealed:
         for line in lines:
             if line.startswith('#EXTINF:'):
@@ -272,10 +283,9 @@ def package(source: str, workdir: str) -> tuple[str, str, bytes]:
                 if not keys or (rotation and elapsed - period_start >= rotation - 1e-6):
                     keys.append(secrets.token_bytes(16))
                     period_start = elapsed
-                    out.append(
-                        f'#EXT-X-KEY:METHOD=AES-128,URI="{key_uri(len(keys) - 1)}",'
-                        f'IV=0x{secrets.token_hex(16)}'
-                    )
+                    # No IV attribute: each range's IV is its media sequence
+                    # number, so no two ranges share a key and an IV.
+                    out.append(f'#EXT-X-KEY:METHOD=AES-128,URI="{key_uri(len(keys) - 1)}"')
                 out.append(line)
                 continue
             found = _BYTERANGE.match(line)
@@ -286,8 +296,8 @@ def package(source: str, workdir: str) -> tuple[str, str, bytes]:
                 chunk = clear.read(length)
                 if len(chunk) != length:
                     raise PackagingError('ffmpeg wrote a playlist longer than its media')
-                iv = bytes.fromhex(out[_last_key_line(out)].rsplit('IV=0x', 1)[1])
-                body = _encrypt_range(keys[-1], iv, chunk)
+                body = _encrypt_range(keys[-1], (first_sequence + ranges).to_bytes(16, 'big'), chunk)
+                ranges += 1
                 sealed.write(body)
                 out.append(f'#EXT-X-BYTERANGE:{len(body)}@{written}')
                 written += len(body)
@@ -304,13 +314,6 @@ def package(source: str, workdir: str) -> tuple[str, str, bytes]:
     return ts_path, playlist, b''.join(keys)
 
 
-def _last_key_line(lines: list[str]) -> int:
-    for index in range(len(lines) - 1, -1, -1):
-        if lines[index].startswith('#EXT-X-KEY:'):
-            return index
-    raise PackagingError('a range before any key')
-
-
 def unpackage(ts_path: str, playlist: str, key: bytes, out_path: str) -> str:
     """Decrypt a sealed .ts back into a playable MP4 at ``out_path`` (remux, no
     re-encode). ``key`` is every key of the video, concatenated, as stored.
@@ -320,10 +323,10 @@ def unpackage(ts_path: str, playlist: str, key: bytes, out_path: str) -> str:
     if not binary:
         raise PackagingError('ffmpeg is not installed')
     key = bytes(key)
-    workdir = os.path.dirname(os.path.abspath(out_path)) or '.'
-    tag = secrets.token_hex(4)
-    key_files = [os.path.join(workdir, f'.vidlock-{tag}-{i}.key') for i in range(len(key) // 16)]
-    local = os.path.join(workdir, f'.vidlock-{tag}.m3u8')
+    # The clear keys go to a private directory (0700), not next to the output.
+    workdir = tempfile.mkdtemp(prefix='vidlock-unseal-')
+    key_files = [os.path.join(workdir, f'{i}.key') for i in range(len(key) // 16)]
+    local = os.path.join(workdir, 'media.m3u8')
     try:
         for index, path in enumerate(key_files):
             with open(path, 'wb') as fh:
@@ -363,9 +366,7 @@ def unpackage(ts_path: str, playlist: str, key: bytes, out_path: str) -> str:
             timeout=TIMEOUT_SECONDS,
         )
     finally:
-        for path in [*key_files, local]:
-            if os.path.exists(path):
-                os.remove(path)
+        shutil.rmtree(workdir, ignore_errors=True)
     if run.returncode:
         raise PackagingError(f'ffmpeg exited {run.returncode}: {run.stderr.strip()[-300:]}')
     return out_path

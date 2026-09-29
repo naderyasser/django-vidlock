@@ -13,6 +13,14 @@ from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string
 
 DEFAULTS: dict[str, Any] = {
+    # A named group of the settings below: 'relaxed', 'balanced' or 'strict'
+    # (see PROFILES). Anything you set yourself overrides it.
+    'PROFILE': 'balanced',
+    # False: monitor mode. The protective rules (key pace and limits, one
+    # screen, Fetch Metadata, raw keys, automatic pauses) log and signal what
+    # they would refuse, and refuse nothing. Tokens, sessions and can_watch()
+    # are enforced either way. Try vidlock on real viewers this way first.
+    'ENFORCE': True,
     # Dotted path to your SealedBackend subclass: who may watch, how a video
     # is found. Required for the playlist and key views.
     'BACKEND': None,
@@ -114,8 +122,48 @@ DEFAULTS: dict[str, Any] = {
 }
 
 
+#: Named groups of settings: ``VIDLOCK['PROFILE']``. A setting you write
+#: yourself always wins over the profile's.
+PROFILES: dict[str, dict[str, Any]] = {
+    # Few false alarms: for a site where sharing is not the worry yet.
+    'relaxed': {
+        'KEY_PACE': 4.0,
+        'KEY_BURST': 12,
+        'KEY_FETCHES_PER_HOUR': 60,
+        'KEY_VIDEOS_PER_HOUR': 60,
+        'MAX_NETWORKS_PER_DAY': None,
+        'RISK_THRESHOLD': 20,
+    },
+    # The defaults.
+    'balanced': {},
+    # Paid courses that leak: one screen, keys only through the page's key
+    # exchange, tighter pace, and a flagged account paused for an hour.
+    'strict': {
+        'KEY_ROTATION_SECONDS': 30,
+        'KEY_PACE': 1.5,
+        'KEY_BURST': 4,
+        'KEY_VIDEOS_PER_HOUR': 15,
+        'REQUIRE_WRAPPED_KEY': True,
+        'STRICT_FETCH_METADATA': True,
+        'MAX_STREAMS': 1,
+        'MAX_NETWORKS_PER_DAY': 4,
+        'RISK_SUSPEND_SECONDS': 3600,
+    },
+}
+
+
 def get(name: str) -> Any:
-    return getattr(settings, 'VIDLOCK', {}).get(name, DEFAULTS[name])
+    configured = getattr(settings, 'VIDLOCK', {})
+    if name in configured:
+        return configured[name]
+    profile = PROFILES.get(configured.get('PROFILE') or 'balanced', {})
+    return profile.get(name, DEFAULTS[name])
+
+
+def enforcing() -> bool:
+    """False in monitor mode (``ENFORCE = False``): protective rules report
+    what they would refuse and let the request through."""
+    return bool(get('ENFORCE'))
 
 
 def load(name: str) -> Any:

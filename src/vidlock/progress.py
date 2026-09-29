@@ -7,9 +7,10 @@ and a count per ``WatchProgress.BUCKET_SECONDS`` of video — so a teacher can
 see who really watched a lesson, where they stopped, and which part everyone
 replays.
 
-The stretches come from the viewer's browser, so a heartbeat may claim no
-more video than could have played since the one before (at up to 2.5x);
-anything beyond is dropped. It is analytics, not proof.
+The stretches come from the viewer's browser, so what a viewer may claim is
+an allowance that fills at 2.5x real time and that every heartbeat spends:
+claims beyond it are dropped, however many heartbeats carry them. It is
+analytics, not proof.
 
     from vidlock import progress
 
@@ -29,9 +30,11 @@ from django.db import transaction
 from vidlock import conf
 
 MAX_SPEED = 2.5
-#: A seconds allowance per heartbeat on top of the elapsed time (clock skew,
-#: the first heartbeat of a page).
+#: What a viewer's first heartbeat may claim (it cannot know the page's age).
 SLACK = 45
+#: The most a viewer can bank by not sending heartbeats (a tab in the
+#: background, a lost connection): ten minutes of video.
+ALLOWANCE_CAP = 600
 #: Seconds between one reported piece's end and the next one's start that
 #: still make them one continuous play.
 JOIN_GAP = 1.5
@@ -56,21 +59,31 @@ def _clean(watched) -> list[tuple[float, float]]:
     return stretches[:200]
 
 
-def _budget(user_id, video_key: str) -> float:
-    """Seconds of video this heartbeat may add: what could have played since
-    the last one."""
-    key = f'vidlock:progress:last:{user_id}:{video_key}'
+def _budget(user_id, video_key: str, namespace: str = '') -> float:
+    """Seconds of video this heartbeat may add: an allowance that fills at
+    MAX_SPEED times real time (up to ALLOWANCE_CAP) and that each heartbeat
+    spends. Back-to-back heartbeats get nothing new."""
+    key = f'vidlock:progress:allow:{namespace}:{user_id}:{video_key}'
     now = time.time()
     try:
-        last = cache.get(key)
-        cache.set(key, now, 6 * 3600)
+        state = cache.get(key)
     except Exception:
-        last = None
-    elapsed = now - last if last else 0
-    return min(elapsed, 3600) * MAX_SPEED + SLACK
+        state = None
+    if state is None:
+        return SLACK
+    return min(ALLOWANCE_CAP, state['left'] + (now - state['at']) * MAX_SPEED)
 
 
-def record(user, video, watched, position=None) -> None:
+def _spend(user_id, video_key: str, left: float, namespace: str = '') -> None:
+    with contextlib.suppress(Exception):
+        cache.set(
+            f'vidlock:progress:allow:{namespace}:{user_id}:{video_key}',
+            {'left': max(0.0, left), 'at': time.time()},
+            6 * 3600,
+        )
+
+
+def record(user, video, watched, position=None, namespace: str = '') -> None:
     """Add the stretches a heartbeat reported to the viewer's progress."""
     if not conf.get('TRACK_PROGRESS'):
         return
@@ -78,16 +91,18 @@ def record(user, video, watched, position=None) -> None:
 
     label, video_id = _label(video), str(video.pk)
     duration = float(getattr(video, 'sealed_duration', 0) or 0)
-    budget = _budget(user.pk, f'{label}:{video_id}')
+    if duration <= 0:
+        return  # nothing sealed to measure against
+    budget = _budget(user.pk, f'{label}:{video_id}', namespace)
     kept, total = [], 0.0
     for start, stop in _clean(watched):
-        if duration:
-            stop = min(stop, duration)  # noqa: PLW2901 — clipped to the video
+        stop = min(stop, duration)  # noqa: PLW2901 — clipped to the video
         if total >= budget or stop <= start:
             continue
         stop = min(stop, start + budget - total)  # noqa: PLW2901 — clipped to the budget
         kept.append((start, stop))
         total += stop - start
+    _spend(user.pk, f'{label}:{video_id}', budget - total, namespace)
     if not kept:
         return
     size = WatchProgress.BUCKET_SECONDS
@@ -96,7 +111,7 @@ def record(user, video, watched, position=None) -> None:
             user=user, video_type=label, video_id=video_id
         )
         buckets = list(row.buckets or [])
-        run_key = f'vidlock:progress:run:{user.pk}:{label}:{video_id}'
+        run_key = f'vidlock:progress:run:{namespace}:{user.pk}:{label}:{video_id}'
         try:
             run = cache.get(run_key)
         except Exception:

@@ -1,0 +1,21 @@
+{% extends 'lessons/base.html' %}
+{% block content %}
+<h1>Lessons</h1>
+{% for lesson in lessons %}
+  <div class="card">
+    <a href="{% url 'watch' lesson.pk %}"><strong>{{ lesson.title }}</strong></a>
+    {% if lesson.is_sealed %}<span class="pill">sealed · {{ lesson.key_count }} key{{ lesson.key_count|pluralize }}</span>
+    {% else %}<span class="pill warn">{{ lesson.sealed_state|default:"not sealed" }}</span>{% endif %}
+    {% if user.is_staff %} · <a href="{% url 'report' lesson.pk %}">who watched</a>{% endif %}
+    {% if lesson.sealed_error %}<div class="muted">{{ lesson.sealed_error }}</div>{% endif %}
+  </div>
+{% empty %}
+  <p class="muted">No lessons yet. Run <code>python manage.py demo</code>, or upload one below as a staff user.</p>
+{% endfor %}
+{% if user.is_staff %}
+  <div class="card">
+    <h3>Upload a lesson</h3>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<input type="submit" value="Upload and seal"></form>
+  </div>
+{% endif %}
+{% endblock %}

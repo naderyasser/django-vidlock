@@ -19,8 +19,10 @@ from __future__ import annotations
 import json
 import logging
 import math
+import time
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.urls import reverse
@@ -29,7 +31,7 @@ from django.utils.translation import gettext_lazy
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from vidlock import conf, guard, keys, progress, risk, signals, streams, tokens, trace, wrap
+from vidlock import conf, guard, keys, monitor, progress, risk, signals, streams, tokens, trace, wrap
 from vidlock.playlist import CONTENT_TYPE, duration, render, with_token
 from vidlock.storage import MAX_SIGNED_TTL, default_storage
 
@@ -68,7 +70,7 @@ def playback_info(request, video, storage=None, channel=None) -> dict:
     backend = backend_cls() if backend_cls else None
     user = request.user
     namespace = _namespace(backend, request)
-    if risk.is_suspended(user.pk, namespace):
+    if risk.is_suspended(user.pk, namespace) and monitor.would_refuse('suspended', request, user, video):
         return {'format': 'blocked', 'error': str(_SUSPENDED)}
     extra = {}
     text = backend.watermark(user, video) if backend is not None else None
@@ -82,7 +84,7 @@ def playback_info(request, video, storage=None, channel=None) -> dict:
     # The bundled player adds vidlock_resume=1 to its own renewals: those keep
     # a stream, never take one from another device.
     outcome = streams.open_lease(user.pk, lease, namespace, take=request.GET.get('vidlock_resume') != '1')
-    if outcome == streams.REFUSED:
+    if outcome == streams.REFUSED and monitor.would_refuse('elsewhere', request, user, video):
         return {'format': 'elsewhere', 'error': str(_ELSEWHERE)}
     if outcome == streams.TOOK:
         risk.note(user, 'takeover', namespace, request)
@@ -152,12 +154,17 @@ def _viewer(request, video_id, backend, require_session):
     if not tokens.account_matches(found, user):
         # The password changed since the token was issued.
         return None, _forbidden(_EXPIRED)
-    if risk.is_suspended(user.pk, namespace):
+    if risk.is_suspended(user.pk, namespace) and monitor.would_refuse('suspended', request, user, video):
         return None, _forbidden(_SUSPENDED)
     if require_session and found.channel == tokens.WEB and _fetch_metadata_refusal(request):
         risk.note(user, 'fetch_metadata', namespace, request)
-        return None, _forbidden()
-    if found.lease and not streams.holds(user.pk, found.lease, namespace):
+        if monitor.would_refuse('fetch_metadata', request, user, video):
+            return None, _forbidden()
+    if (
+        found.lease
+        and not streams.holds(user.pk, found.lease, namespace)
+        and monitor.would_refuse('elsewhere', request, user, video)
+    ):
         return None, HttpResponse(_ELSEWHERE, status=409)
     if not backend.can_watch(user, video):
         return None, _forbidden()
@@ -206,9 +213,15 @@ def key_view(request, video_id):
         raise Http404
 
     share = request.headers.get(wrap.HEADER)
+    if share:
+        # Before the limits: a malformed request must not spend the viewer's keys.
+        try:
+            wrap.check_share(share)
+        except wrap.WrapError:
+            return HttpResponse(status=400)
     if found.channel == tokens.WEB and not share:
         risk.note(user, 'raw_key', namespace, request, once=f'{found.lease}|{video.pk}')
-        if conf.get('REQUIRE_WRAPPED_KEY'):
+        if conf.get('REQUIRE_WRAPPED_KEY') and monitor.would_refuse('raw_key', request, user, video):
             return _forbidden()
     risk.seen_from(user, backend.client_ip(request), namespace, request)
 
@@ -224,9 +237,10 @@ def key_view(request, video_id):
             report = conf.load('ON_KEY_ABUSE')
             if report is not None:
                 report(request, user, video)
-        refused = HttpResponse(_('Too many requests.'), status=429)
-        refused['Retry-After'] = str(guard.retry_after(key_seconds))
-        return refused
+        if monitor.would_refuse(reason, request, user, video):
+            refused = HttpResponse(_('Too many requests.'), status=429)
+            refused['Retry-After'] = str(guard.retry_after(key_seconds))
+            return refused
 
     try:
         key = video.content_key(index)
@@ -249,19 +263,36 @@ def key_view(request, video_id):
 @require_POST
 def heartbeat_view(request, video_id):
     """The player, every HEARTBEAT_SECONDS while the page is open: keeps its
-    stream lease, proves the key it got is being played, and reports
-    tampering it noticed. The token authenticates it, not a CSRF cookie."""
+    stream lease, proves the key it got is being played, reports what was
+    watched and any tampering it noticed. The token authenticates it (no CSRF
+    cookie needed), with the same session binding as a key request."""
     found = tokens.claims(request.GET.get('t', ''), video_id)
     if found is None:
         return JsonResponse({'error': 'expired'}, status=403)
+    if found.channel == tokens.WEB:
+        same_viewer = str(getattr(request.user, 'pk', '')) == found.user_id
+        if not same_viewer or not tokens.session_matches(found, request):
+            return JsonResponse({'error': 'expired'}, status=403)
     user = get_user_model()._default_manager.filter(pk=found.user_id, is_active=True).first()
     if user is None or not tokens.account_matches(found, user):
         return JsonResponse({'error': 'expired'}, status=403)
     backend = _backend()
     namespace = backend.namespace(request)
-    if risk.is_suspended(user.pk, namespace):
+    if risk.is_suspended(user.pk, namespace) and monitor.would_refuse('suspended', request, user):
         return JsonResponse({'error': 'suspended', 'message': str(_SUSPENDED)}, status=403)
-    if found.lease and not streams.touch(user.pk, found.lease, namespace):
+    # A player beats every 30 s (and on pause); more than once a second from
+    # one stream is a script.
+    beat_key = f'vidlock:beat:{namespace}:{user.pk}:{found.lease or video_id}:{int(time.time())}'
+    if not cache.add(beat_key, 1, 2):
+        return JsonResponse({'error': 'slow down'}, status=429)
+    video = backend.get_video(video_id)
+    if video is None or not video.is_sealed or not backend.can_watch(user, video):
+        return JsonResponse({'error': 'expired'}, status=403)
+    if (
+        found.lease
+        and not streams.touch(user.pk, found.lease, namespace)
+        and monitor.would_refuse('elsewhere', request, user, video)
+    ):
         return JsonResponse({'error': 'elsewhere', 'message': str(_ELSEWHERE)}, status=409)
     try:
         report = json.loads(request.body or b'{}')
@@ -272,9 +303,7 @@ def heartbeat_view(request, video_id):
     if report.get('playing') or watched:
         risk.played(user.pk, found.lease, video_id, namespace)
     if watched and conf.get('TRACK_PROGRESS'):
-        video = backend.get_video(video_id)
-        if video is not None:
-            progress.record(user, video, watched, report.get('position'))
+        progress.record(user, video, watched, report.get('position'), namespace)
     if report.get('tamper'):
         risk.note(user, 'tamper', namespace, request, once=found.lease or str(video_id))
     risk.stream_seen_from(user, found.lease, backend.client_ip(request), namespace, request)

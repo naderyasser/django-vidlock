@@ -59,7 +59,9 @@ def test_one_encrypted_file_whose_ranges_decrypt_on_their_own(sample, tmp_path):
     assert data[0] != 0x47, 'the stored file must not be a playable MPEG-TS'
 
     # The second range alone: a player seeking there needs nothing before it.
-    iv = bytes.fromhex(playlist.split('IV=0x')[1][:32])
+    # No IV attribute: HLS uses each range's media sequence number (the second is 1).
+    assert 'IV=' not in playlist
+    iv = (1).to_bytes(16, 'big')
     second = [line for line in playlist.splitlines() if line.startswith('#EXT-X-BYTERANGE')][1]
     length, offset = (int(n) for n in second.split(':')[1].split('@'))
     decryptor = Cipher(algorithms.AES(key), modes.CBC(iv)).decryptor()

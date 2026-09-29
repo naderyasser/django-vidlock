@@ -16,6 +16,10 @@ score (``vidlock.risk``) reaches ``RISK_THRESHOLD``. Keyword arguments:
 ``user``, ``score``, ``events`` (event name -> count), ``suspended_for``
 (seconds; 0 when only flagged) and ``request``.
 
+``monitored`` — in monitor mode (``ENFORCE = False``), sent each time a
+protective rule would have refused a request. Keyword arguments: ``rule``
+(see ``vidlock.monitor.RULES``), ``request``, ``user``, ``video``.
+
     from django.dispatch import receiver
     from vidlock.signals import viewer_flagged
 
@@ -29,3 +33,4 @@ from django.dispatch import Signal
 seal_finished = Signal()
 key_abuse = Signal()
 viewer_flagged = Signal()
+monitored = Signal()

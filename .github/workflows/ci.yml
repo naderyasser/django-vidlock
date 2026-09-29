@@ -63,6 +63,23 @@ jobs:
         env:
           VIDLOCK_TEST_BROWSER_CHANNEL: chrome
 
+  demo:
+    # The example site end to end: sample lesson sealed, played, reported.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg
+      - run: pip install -e .
+      - working-directory: example
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py test lessons
+          python manage.py migrate -v0 && python manage.py demo && python manage.py vidlock_doctor --offline
+
   package:
     runs-on: ubuntu-latest
     steps:

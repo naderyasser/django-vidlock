@@ -6,7 +6,7 @@ manage.py vidlock_status
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count
 
-from vidlock import keys
+from vidlock import conf, keys, monitor
 from vidlock.models import sealed_models
 
 
@@ -40,3 +40,9 @@ class Command(BaseCommand):
             if stale_keys:
                 parts.append(f'{stale_keys} key(s) need vidlock_rewrap')
             self.stdout.write(f'{model._meta.label}: {", ".join(parts)}')
+        mode = 'enforcing' if conf.enforcing() else 'MONITOR MODE (nothing is refused)'
+        self.stdout.write(f'protection: {mode}, profile {conf.get("PROFILE")}')
+        held = monitor.counts()
+        if held:
+            listed = ', '.join(f'{rule} x{n}' for rule, n in sorted(held.items(), key=lambda kv: -kv[1]))
+            self.stdout.write(f'would have refused today: {listed}')

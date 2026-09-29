@@ -11,3 +11,5 @@ build/
 .coverage.*
 coverage.xml
 htmlcov/
+example/demo.sqlite3
+example/media/

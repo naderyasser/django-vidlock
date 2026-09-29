@@ -109,6 +109,16 @@ vidlock does is:
 If you need more than that, you need Widevine/FairPlay/PlayReady and their
 licence fees.
 
+## Try it in two minutes
+
+The [`example/`](example/) folder is a small course site: sign in, watch a
+sealed lesson, see who watched it. It runs on your machine with no bucket and
+no Redis:
+
+```bash
+cd example && pip install -e .. && python manage.py migrate && python manage.py demo && python manage.py runserver
+```
+
 ## Requirements
 
 * Python 3.10+ and Django 4.2, 5.x or 6.0
@@ -173,7 +183,40 @@ path('video/', include('vidlock.urls')),
 ```
 
 Then run `python manage.py makemigrations && python manage.py migrate`, and
-`python manage.py check` to see whether anything is missing.
+`python manage.py vidlock_doctor`. The doctor seals a test clip, round-trips
+a file through your bucket with a Range request, checks the cache and the key
+secrets, and tells you what to fix.
+
+### Profiles, and trying it safely
+
+One line picks a whole set of protective settings; anything you set yourself
+still wins:
+
+```python
+VIDLOCK = {..., 'PROFILE': 'strict'}    # or 'relaxed', 'balanced' (the default)
+```
+
+| | relaxed | balanced | strict |
+|---|---|---|---|
+| Key pace (× playback) | 4 | 2 | 1.5 |
+| Different lessons per hour | 60 | 30 | 15 |
+| One screen at a time | — | — | ✓ |
+| Keys only through the page's exchange | — | — | ✓ |
+| Flagged accounts paused | — | — | 1 hour |
+
+**Monitor mode.** `'ENFORCE': False` runs every protective rule (key pace
+and limits, one screen, Fetch Metadata, raw keys, automatic pauses) but
+refuses nothing. It counts what it *would* have refused, which
+`manage.py vidlock_status` shows, and sends `vidlock.signals.monitored` for
+each. Run a week like that on real students, look at the numbers, tune, then
+enforce. Tokens, sessions, password changes and `can_watch()` are enforced in
+every mode.
+
+**Developing without a bucket.** `'STORAGE':
+'vidlock.contrib.devstorage.DevStorage'` keeps videos in a local folder and
+serves them from Django with signed, expiring Range responses. Add
+`path('dev-media/', include('vidlock.contrib.devstorage'))` to your URLs. It
+refuses to run with `DEBUG = False`.
 
 ### After an upload lands in the bucket
 
@@ -471,7 +514,8 @@ def alert(sender, request, user, video, reason, **kwargs):
 **Management commands**
 
 ```bash
-manage.py vidlock_status                      # videos per state, keys waiting for a rewrap
+manage.py vidlock_doctor                      # check the whole setup end to end
+manage.py vidlock_status                      # videos per state, keys to rewrap, monitor-mode counts
 manage.py vidlock_seal                        # seal existing videos (unsealed, pending, failed)
 manage.py vidlock_seal courses.Lesson --state failed --limit 50
 manage.py vidlock_seal --queue                # hand them to VIDLOCK['ENQUEUE_SEAL'] instead
@@ -526,6 +570,8 @@ recover any video later with `vidlock_export`.
 
 | Key | Default | |
 |---|---|---|
+| `PROFILE` | `'balanced'` | `'relaxed'`, `'balanced'` or `'strict'`: a set of the protective settings below. |
+| `ENFORCE` | `True` | `False` is monitor mode: count what would be refused, refuse nothing. |
 | `BACKEND` | — | Dotted path to your `SealedBackend` subclass. |
 | `STORAGE` | S3Storage | Dotted path to a storage class; `vidlock.storage.DjangoStorage` wraps a Django storage. |
 | `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | | For the default storage. |
@@ -562,6 +608,16 @@ player follows `<html lang>`. Corrections and new languages are welcome:
 they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 ## Upgrading
+
+**From 0.4 to 0.5**
+
+* Nothing to migrate. Tokens now sign a JSON list. Tokens from 0.4 keep
+  working until they expire (ten minutes).
+* Videos sealed from now on use a different IV for every byte range: the
+  HLS default, the segment's sequence number. Videos sealed before keep
+  their IVs and keep playing.
+* The heartbeat now checks the session, the video and `can_watch()`, like a
+  key request does. It accepts one request per second per stream.
 
 **From 0.3 to 0.4**
 

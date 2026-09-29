@@ -35,6 +35,23 @@ def check_settings(app_configs, **kwargs):
         except ImproperlyConfigured as exc:
             problems.append(Error(str(exc), id=error_id))
 
+    if user.get('PROFILE', 'balanced') not in conf.PROFILES:
+        problems.append(
+            Error(
+                f"VIDLOCK['PROFILE'] = {user.get('PROFILE')!r} is not one of {', '.join(conf.PROFILES)}.",
+                id='vidlock.E005',
+            )
+        )
+    if not conf.enforcing():
+        problems.append(
+            Warning(
+                'vidlock is in monitor mode: protective rules count what they would refuse, '
+                'and refuse nothing.',
+                hint="See manage.py vidlock_status, then set VIDLOCK['ENFORCE'] = True.",
+                id='vidlock.W008',
+            )
+        )
+
     if not conf.get('BACKEND'):
         problems.append(
             Warning(

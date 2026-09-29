@@ -77,26 +77,46 @@ class TestSharedSession:
     def student(self):
         return get_user_model().objects.create_user('amira', password='pw')
 
-    def beat(self, client, student, ip, lease='L1'):
-        t = tokens.sign(7, student.pk, tokens.APP, tokens.account_fingerprint(student), '', lease)
-        return client.post(
-            f'/sealed/7/heartbeat?t={t}', '{}', content_type='application/json', REMOTE_ADDR=ip
-        )
+    @pytest.fixture
+    def lesson(self, student):
+        from tests.test_hardening import ROTATED
+        from vidlock import keys
 
-    def test_one_stream_on_two_networks_at_once(self, client, student):
-        self.beat(client, student, '10.0.0.1')
-        self.beat(client, student, '192.168.5.9')
-        self.beat(client, student, '10.0.0.1')
+        lesson = Lesson.objects.create(
+            title='x',
+            video_key='l/a.ts',
+            sealed_state='sealed',
+            sealed_playlist=ROTATED,
+            sealed_key=keys.wrap(bytes(48)),
+        )
+        lesson.students.add(student)
+        return lesson
+
+    def beat(self, client, lesson, student, ip, after=0.0, lease='L1'):
+        t = tokens.sign(lesson.pk, student.pk, tokens.APP, tokens.account_fingerprint(student), '', lease)
+        with mock.patch('vidlock.views.time.time', return_value=self.start + after):
+            return client.post(
+                f'/sealed/{lesson.pk}/heartbeat?t={t}', '{}', content_type='application/json', REMOTE_ADDR=ip
+            )
+
+    @pytest.fixture(autouse=True)
+    def clock(self):
+        self.start = time.time()
+
+    def test_one_stream_on_two_networks_at_once(self, client, lesson, student):
+        assert self.beat(client, lesson, student, '10.0.0.1').status_code == 200
+        self.beat(client, lesson, student, '192.168.5.9', after=2)
+        self.beat(client, lesson, student, '10.0.0.1', after=4)
         assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['shared_session']
 
-    def test_a_phone_that_moves_networks_is_not_sharing(self, client, student):
-        self.beat(client, student, '10.0.0.1')
+    def test_a_phone_that_moves_networks_is_not_sharing(self, client, lesson, student):
+        self.beat(client, lesson, student, '10.0.0.1')
         later = time.time() + risk.CONCURRENT_WINDOW + 5
         with mock.patch('vidlock.risk.time.time', return_value=later):
-            self.beat(client, student, '192.168.5.9')
+            self.beat(client, lesson, student, '192.168.5.9', after=risk.CONCURRENT_WINDOW + 5)
         assert risk.score(student.pk) == 0
 
-    def test_same_network_is_fine(self, client, student):
-        for last in (1, 2, 3):
-            self.beat(client, student, f'10.0.0.{last}')
+    def test_same_network_is_fine(self, client, lesson, student):
+        for n, last in enumerate((1, 2, 3)):
+            self.beat(client, lesson, student, f'10.0.0.{last}', after=2 * n)
         assert risk.score(student.pk) == 0

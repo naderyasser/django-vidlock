@@ -44,7 +44,7 @@ import time
 from django.core.cache import cache
 from django.utils import timezone
 
-from vidlock import conf, signals
+from vidlock import conf, monitor, signals
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +104,8 @@ def _flag(user, state, namespace, request):
         'vidlock: viewer %s flagged, score %s: %s', getattr(user, 'pk', user), state['score'], state['events']
     )
     seconds = int(conf.get('RISK_SUSPEND_SECONDS') or 0)
+    if seconds and not monitor.would_refuse('suspend', request, user):
+        seconds = 0  # monitor mode: counted, not paused
     if seconds:
         cache.set(_suspended_key(getattr(user, 'pk', user), namespace), dict(state['events']), seconds)
     signals.viewer_flagged.send(

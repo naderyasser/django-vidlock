@@ -33,6 +33,16 @@ def _b64decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + '=' * (-len(value) % 4))
 
 
+def check_share(client_public: str) -> None:
+    """Cheap shape check of a key share, before any work is spent on it."""
+    try:
+        raw = _b64decode(client_public)
+    except Exception as exc:
+        raise WrapError(f'bad {HEADER}') from exc
+    if len(raw) != 65 or raw[0] != 4:
+        raise WrapError(f'bad {HEADER}: not an uncompressed P-256 point')
+
+
 def seal(client_public: str, content_key: bytes) -> bytes:
     """``content_key`` sealed to the page whose public key (raw, uncompressed
     P-256, base64url) is ``client_public``."""

@@ -17,6 +17,7 @@ password change (Django's "log out everywhere") voids tokens on both channels.
 
 from __future__ import annotations
 
+import json
 from typing import NamedTuple
 
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
@@ -55,7 +56,10 @@ def session_fingerprint(request) -> str:
 def sign(video_id, user_id, channel: str = WEB, account: str = '', session: str = '', lease: str = '') -> str:
     if channel not in (WEB, APP):
         raise ValueError(f'unknown channel {channel!r}')
-    return TimestampSigner(salt=_SALT).sign(f'{video_id}|{user_id}|{channel}|{account}|{session}|{lease}')
+    # JSON, not a joined string: an id containing the separator could shift the
+    # fields after it (string primary keys chosen by users).
+    fields = [str(video_id), str(user_id), channel, account, session, lease]
+    return TimestampSigner(salt=_SALT).sign(json.dumps(fields, separators=(',', ':')))
 
 
 def sign_for(request, video_id, channel: str | None = None, lease: str = '') -> str:
@@ -74,7 +78,17 @@ def claims(token: str | None, video_id, max_age: int | None = None) -> Claims | 
         value = TimestampSigner(salt=_SALT).unsign(token or '', max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None
-    video, user, channel, account, session, lease = [*value.split('|'), '', '', '', '', ''][:6]
+    if value.startswith('['):
+        try:
+            fields = json.loads(value)
+        except ValueError:
+            return None
+        if not isinstance(fields, list) or len(fields) != 6 or not all(isinstance(f, str) for f in fields):
+            return None
+    else:
+        # Tokens signed by 0.4 and before (they live ten minutes).
+        fields = [*value.split('|'), '', '', '', '', ''][:6]
+    video, user, channel, account, session, lease = fields
     if video != str(video_id) or not user or channel not in (WEB, APP):
         return None
     return Claims(user, channel, account, session, lease)

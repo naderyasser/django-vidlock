@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.5.0 — 2026-09-29
+
+### Security (from an independent review)
+
+* **Key pace under parallel requests.** The pace bucket is now taken under a
+  lock. Before, requests sent in parallel could all read a full bucket and
+  get every key at once.
+* **Heartbeat.** It now checks the session (web), a sealed video and
+  `can_watch()` like a key request, and accepts one request per second per
+  stream. Watch progress spends an allowance that fills at 2.5× real time,
+  so back-to-back heartbeats can no longer inflate it. Stretches past the
+  end of the video are dropped.
+* **Tokens** sign a JSON list, so an id containing a separator cannot shift
+  fields.
+* **ffmpeg and ffprobe** read uploads only as MP4/MOV, and only from local
+  disk (`-f mov -protocol_whitelist file`). An "MP4" that is really a
+  playlist cannot make older ffmpeg builds fetch URLs or read other files.
+* **Per-range IV.** Each byte range is encrypted with its own sequence
+  number as IV (the HLS default), so no two ranges share a key and an IV.
+* **Export** writes the plaintext keys to a private temporary folder, not
+  next to the output.
+* A malformed key-exchange header is refused before it can spend the
+  viewer's keys.
+
+### New
+
+* **Profiles:** `'PROFILE': 'relaxed' | 'balanced' | 'strict'`.
+* **Monitor mode:** `'ENFORCE': False` counts what would be refused
+  (`vidlock_status`, `vidlock.signals.monitored`) and refuses nothing.
+  Access control is enforced in every mode.
+* **`manage.py vidlock_doctor`:** checks ffmpeg (seal and unseal), storage
+  (upload, then a signed Range read), cache, keys, migrations and the
+  backend, and says what to fix.
+* **`vidlock.contrib.devstorage`:** develop without a bucket (DEBUG only).
+* **`example/`:** a runnable demo site, tested in CI.
+* **Player:** progress that was not recorded is re-sent; the watermark
+  frame follows a video sized in %.
+
 ## 0.4.0 — 2026-09-29
 
 ### Watch progress

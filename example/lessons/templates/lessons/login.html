@@ -1,0 +1,8 @@
+{% extends 'lessons/base.html' %}
+{% block content %}
+<div class="card" style="max-width:380px;margin:40px auto">
+  <h2>Sign in</h2>
+  <p class="muted">After <code>manage.py demo</code>: <b>teacher</b> / <b>demo</b> or <b>student</b> / <b>demo</b>.</p>
+  <form method="post">{% csrf_token %}{{ form.as_p }}<input type="submit" value="Sign in"></form>
+</div>
+{% endblock %}

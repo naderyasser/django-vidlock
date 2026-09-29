@@ -223,6 +223,7 @@
       '.vidlock-frame:fullscreen>video,.vidlock-frame:-webkit-full-screen>video{width:100%;height:100%}' +
       '.vidlock-mark{position:absolute;z-index:2147483647;pointer-events:none;user-select:none;' +
       '-webkit-user-select:none;white-space:nowrap;font:600 clamp(11px,2.2vw,20px)/1.2 system-ui,sans-serif;' +
+      'max-width:calc(100% - 8px);overflow:hidden;' +
       'color:#fff;text-shadow:0 0 3px #000,0 0 1px #000;transition:top 1.2s ease,left 1.2s ease}' +
       '.vidlock-pattern{position:absolute;inset:0;z-index:2147483646;pointer-events:none;background-repeat:repeat}';
     document.head.appendChild(style);
@@ -235,7 +236,13 @@
     if (!frame || !frame.classList || !frame.classList.contains('vidlock-frame')) {
       frame = document.createElement('div');
       frame.className = 'vidlock-frame';
-      frame.style.display = getComputedStyle(video).display === 'block' ? 'block' : 'inline-block';
+      // The frame takes the video's place in the layout: a video sized in %
+      // (width:100%) needs a block frame of that width, not one that shrinks
+      // around the video's default 300px.
+      const width = video.style.width || video.getAttribute('width') || '';
+      const fluid = /%$/.test(width) || getComputedStyle(video).display === 'block';
+      frame.style.display = fluid ? 'block' : 'inline-block';
+      if (/%$/.test(width)) frame.style.width = width;
       video.parentNode.insertBefore(frame, video);
       frame.appendChild(video);
       madeFrame = true;
@@ -495,12 +502,16 @@
           tamper: tampered(),
         }),
       }).then(function (response) {
+        // Not recorded (throttled, a server hiccup): send it with the next one.
+        if (!response.ok && response.status !== 409 && response.status !== 403) {
+          watched = played.concat(watched);
+        }
         if (response.status !== 409 && response.status !== 403) return;
         return response.json().then(function (data) {
           if (data.error === 'elsewhere') stop(data.message || text.elsewhere);
           else if (data.error === 'suspended') stop(data.message || text.blocked);
         });
-      }).catch(function () {});
+      }).catch(function () { watched = played.concat(watched); });
     }
 
     function startHeartbeat(data) {
