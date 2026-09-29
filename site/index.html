@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>vidlock demo</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="preview-bar"><b>Live preview</b><span>The django-vidlock demo as static pages: the design and motion are real; sign-in, uploads and the sealed stream need the Django server.</span><a href="https://github.com/naderyasser/django-vidlock">GitHub →</a></div>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="sky"><canvas id="sky"></canvas></div>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="index.html"><span class="brand-mark"></span>vidlock</a>
+  
+    <form class="nav-search" method="get" action="search.html"><input type="search" name="q" value="" placeholder="Search inside every lesson…"></form>
+    <form class="nav-user" method="post" action="login.html">
+      <span>teacher · teacher</span>
+      <button class="beam small"><span>Sign out</span></button>
+    </form>
+  
+</div></nav>
+<main>
+  
+  
+<div class="eyebrow">Your course</div>
+<h1>Lessons that stay <em>yours</em>.</h1>
+<div class="grid">
+
+  <div class="card lesson-card">
+    <a class="title" href="watch.html">Sample lesson (2½ minutes)</a>
+    <div class="row">
+      <span class="pill ok">sealed · 3 keys</span>
+      
+    </div>
+    
+    <div class="row" style="margin-top:auto">
+      <a class="beam small" href="watch.html"><span>Watch ▶</span></a>
+      <a class="muted" href="report.html">who watched →</a>
+    </div>
+  </div>
+
+</div>
+
+  <div class="card" style="margin-top:28px">
+    <div class="eyebrow">Teacher</div>
+    <h3>Upload a lesson</h3>
+    <p class="muted">Straight from your browser to the bucket: the file never passes through Django.</p>
+    <form method="post" enctype="multipart/form-data" data-vidlock-upload="/video/upload">
+      <p>
+    <label for="id_title">Title:</label>
+    <input type="text" name="title" maxlength="200" required id="id_title">
+    
+    
+  </p>
+
+  
+  <p>
+    <label for="id_video">Video:</label>
+    <input type="file" name="video" aria-describedby="id_video_helptext" id="id_video">
+    
+      <span class="helptext" id="id_video_helptext">An MP4 or MOV in H.264 — most phones and screen recorders.</span>
+    
+    
+      
+    
+  </p>
+      <progress class="upload-progress" hidden></progress>
+      <p class="upload-error" data-vidlock-upload-error></p>
+      <button class="beam"><span>Upload and seal</span></button>
+    </form>
+    
+  </div>
+
+
+</main>
+<script src="constellation.js" defer></script>
+<script src="motion.js" defer></script>
+<script src="preview.js"></script>
+</body>
+</html>

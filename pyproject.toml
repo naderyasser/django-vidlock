@@ -98,6 +98,8 @@ select = ["E", "F", "W", "I", "B", "SIM", "PLW", "RUF"]
 "**/migrations/*" = ["RUF012", "E501"]
 # Arabic letter folding for search: the "ambiguous" letters are the point.
 "src/vidlock/transcribe.py" = ["RUF001", "RUF002", "RUF003"]
+# Minified CSS and markup written into the static preview.
+"example/lessons/management/commands/build_site.py" = ["E501"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["vidlock", "tests"]

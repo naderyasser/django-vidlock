@@ -115,6 +115,9 @@ licence fees.
 
 ## Try it in two minutes
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fnaderyasser%2Fdjango-vidlock&root-directory=site&project-name=vidlock-demo&repository-name=vidlock-demo)
+— a static preview of the demo ([`site/`](site/)): the real pages and motion; the sealed stream needs Django.
+
 The [`example/`](example/) folder is a small course site: sign in, watch a
 sealed lesson, see who watched it. It runs on your machine with no bucket and
 no Redis:

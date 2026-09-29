@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Search · vidlock</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="preview-bar"><b>Live preview</b><span>The django-vidlock demo as static pages: the design and motion are real; sign-in, uploads and the sealed stream need the Django server.</span><a href="https://github.com/naderyasser/django-vidlock">GitHub →</a></div>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="sky"><canvas id="sky"></canvas></div>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="index.html"><span class="brand-mark"></span>vidlock</a>
+  
+    <form class="nav-search" method="get" action="search.html"><input type="search" name="q" value="lens" placeholder="Search inside every lesson…"></form>
+    <form class="nav-user" method="post" action="login.html">
+      <span>student</span>
+      <button class="beam small"><span>Sign out</span></button>
+    </form>
+  
+</div></nav>
+<main>
+  
+  
+<div class="eyebrow">Search inside every lesson</div>
+<h1>“lens”</h1>
+<form method="get" class="card row"><input type="search" name="q" value="lens" autofocus placeholder="A word or a phrase, in any language…"><button class="beam"><span>Search</span></button></form>
+
+  <div class="card">
+  
+    <a class="hit" href="watch.html#t=0.0"><span class="time">0s</span><span><b style="color:var(--text)">Sample lesson (2½ minutes)</b><br><span class="muted">Welcome to the lesson on thin lenses. A converging lens brings parallel rays of light together at the focal point.</span></span></a>
+  
+    <a class="hit" href="watch.html#t=7.0"><span class="time">7s</span><span><b style="color:var(--text)">Sample lesson (2½ minutes)</b><br><span class="muted">The distance from the lens to that point is the focal length.</span></span></a>
+  
+    <a class="hit" href="watch.html#t=11.0"><span class="time">11s</span><span><b style="color:var(--text)">Sample lesson (2½ minutes)</b><br><span class="muted">The lens form your links to the object distance, the image distance, and the focal length.</span></span></a>
+  
+  </div>
+
+
+</main>
+<script src="constellation.js" defer></script>
+<script src="motion.js" defer></script>
+<script src="preview.js"></script>
+</body>
+</html>

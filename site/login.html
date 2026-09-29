@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · vidlock</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="preview-bar"><b>Live preview</b><span>The django-vidlock demo as static pages: the design and motion are real; sign-in, uploads and the sealed stream need the Django server.</span><a href="https://github.com/naderyasser/django-vidlock">GitHub →</a></div>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="sky"><canvas id="sky"></canvas></div>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="index.html"><span class="brand-mark"></span>vidlock</a>
+  
+</div></nav>
+<main>
+  
+  
+<div class="center">
+  <div class="card" style="width:min(400px,100%)">
+    <div class="eyebrow">vidlock demo</div>
+    <h1 style="font-size:30px">Protected lessons, <em>watched</em>.</h1>
+    <p class="muted">After <code>manage.py demo</code>: <b>student</b> / <b>demo</b> to watch, <b>teacher</b> / <b>demo</b> for reports.</p>
+    <form method="get" action="index.html">
+      <p>
+    <label for="id_username">Username:</label>
+    <input type="text" name="username" autofocus autocapitalize="none" autocomplete="username" maxlength="150" required id="id_username">
+    
+    
+  </p>
+
+  
+  <p>
+    <label for="id_password">Password:</label>
+    <input type="password" name="password" autocomplete="current-password" required id="id_password">
+    
+    
+      
+    
+  </p>
+      <button class="beam"><span>Sign in →</span></button>
+    </form>
+  </div>
+</div>
+
+</main>
+<script src="constellation.js" defer></script>
+<script src="motion.js" defer></script>
+<script src="preview.js"></script>
+</body>
+</html>

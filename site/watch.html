@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sample lesson (2½ minutes) · vidlock</title>
+  <link rel="stylesheet" href="theme.css">
+</head>
+<body>
+<div class="preview-bar"><b>Live preview</b><span>The django-vidlock demo as static pages: the design and motion are real; sign-in, uploads and the sealed stream need the Django server.</span><a href="https://github.com/naderyasser/django-vidlock">GitHub →</a></div>
+<div class="aurora"><i></i><i></i><i></i></div>
+<div class="sky"><canvas id="sky"></canvas></div>
+<nav class="nav"><div class="nav-inner">
+  <a class="brand" href="index.html"><span class="brand-mark"></span>vidlock</a>
+  
+    <form class="nav-search" method="get" action="search.html"><input type="search" name="q" value="focal length" placeholder="Search inside every lesson…"></form>
+    <form class="nav-user" method="post" action="login.html">
+      <span>student</span>
+      <button class="beam small"><span>Sign out</span></button>
+    </form>
+  
+</div></nav>
+<main>
+  
+  
+<div class="eyebrow">Lesson</div>
+<h1>Sample lesson (2½ minutes)</h1>
+<div class="card player-shell">
+  <div class="video-wrap"><video id="player" controls playsinline muted autoplay style="width:100%" src="lesson.mp4"><track kind="captions" srclang="en" label="English" default src="captions.vtt"></video><div class="demo-mark">student · B2NXV4 · <span id="clock"></span></div></div>
+  <p id="status" class="status">Preview: a plain copy of the lesson. On the real site this is the sealed HLS stream, with a key for every minute.</p>
+</div>
+
+<div class="card">
+  <div class="eyebrow">Search this lesson</div>
+  <form method="get" class="row" style="margin-top:10px">
+    <input type="search" name="q" value="focal length" placeholder="A word the teacher said…">
+    <button class="beam"><span>Find</span></button>
+  </form>
+  
+    <div style="margin-top:14px">
+    
+      <div class="hit"><button type="button" class="beam small" onclick="player.seek(7.0)"><span>▶ 7s</span></button><div>The distance from the lens to that point is the focal length.</div></div>
+    
+      <div class="hit"><button type="button" class="beam small" onclick="player.seek(11.0)"><span>▶ 11s</span></button><div>The lens form your links to the object distance, the image distance, and the focal length.</div></div>
+    
+    </div>
+  
+</div>
+
+<div class="card muted">
+  <div class="eyebrow" style="margin-bottom:6px">Try to break it</div>
+  DevTools → Network: the <code>key</code> requests carry a blob sealed to this page, not the key.
+  Open this lesson in another browser as the same student: this one stops.
+  Fullscreen it: the watermark (name, code, time) stays.
+</div>
+<script>
+var video = document.getElementById('player');
+window.player = {
+  seek: function (t) {
+    function go() { video.currentTime = t; video.play(); }
+    if (video.readyState >= 1) go(); else video.addEventListener('loadedmetadata', go, { once: true });
+  },
+};
+var jump = location.hash.match(/t=([\d.]+)/);
+if (jump) player.seek(parseFloat(jump[1]));
+(function tick() {
+  var now = new Date();
+  document.getElementById('clock').textContent = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 5);
+  setTimeout(tick, 15000);
+})();
+</script>
+
+</main>
+<script src="constellation.js" defer></script>
+<script src="motion.js" defer></script>
+<script src="preview.js"></script>
+</body>
+</html>

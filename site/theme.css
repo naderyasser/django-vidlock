@@ -1,0 +1,269 @@
+/*
+ * vidlock demo theme — the design language of ThreeUI Community
+ * (https://github.com/MengTo/threeui, MIT © 2026 Meng To): its "Lumira"
+ * constellation palette, glass surfaces and spinning-border button, written
+ * as plain CSS so the demo needs no build step and no CDN.
+ */
+:root {
+  --page: #070914;
+  --surface: #0e1222;
+  --surface-2: #121832;
+  --border: #1c2236;
+  --text: #f2f4fb;
+  --muted: #9aa3bc;
+  --gold: #e6c879;
+  --sky: #7fc4ff;
+  --danger: #ff8a8a;
+  --radius: 14px;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 24px 48px -24px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+html { background: radial-gradient(ellipse at center, #0e1222 0%, var(--page) 100%) fixed var(--page); }
+body {
+  font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif;
+  color: var(--text);
+}
+::selection { background: rgba(127, 196, 255, 0.3); color: var(--sky); }
+a { color: var(--sky); text-decoration: none; }
+a:hover { color: var(--text); }
+code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--gold); }
+
+/* Background: the drifting constellation, behind everything, never in the way. */
+.sky { position: fixed; inset: 0; z-index: -2; pointer-events: none; }
+.sky canvas { width: 100%; height: 100%; opacity: 0.55; }
+.sky::after {
+  content: ""; position: fixed; inset: 0;
+  background: linear-gradient(to bottom, transparent, rgba(14, 18, 34, 0.4) 50%, var(--page));
+  opacity: 0.8;
+}
+
+/* Glass navigation */
+.nav {
+  position: sticky; top: 0; z-index: 20;
+  background: rgba(14, 18, 34, 0.45); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.nav-inner { max-width: 1080px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; gap: 18px; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 300; letter-spacing: 0.12em; text-transform: uppercase; }
+.brand-mark {
+  width: 30px; height: 30px; border: 1px solid var(--border); border-radius: 8px;
+  display: grid; place-items: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.brand-mark::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 12px rgba(230, 200, 121, 0.6); }
+.nav-search { flex: 1; max-width: 420px; margin-left: auto; }
+.nav-user { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+
+main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
+h1 { font-weight: 300; font-size: clamp(26px, 4vw, 40px); letter-spacing: -0.02em; margin: 8px 0 20px; }
+h1 em { font-style: normal; color: var(--gold); }
+h2, h3 { font-weight: 400; margin: 0 0 12px; }
+.eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); font-size: 13px; }
+
+/* Glass cards */
+.card {
+  position: relative;
+  background: linear-gradient(to bottom, rgba(18, 24, 50, 0.72), rgba(14, 18, 34, 0.72));
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; margin: 16px 0; box-shadow: var(--shadow);
+}
+.card::before { /* the thin light edge along the top */
+  content: ""; position: absolute; inset: 0 0 auto; height: 1px; border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(230, 200, 121, 0.35), transparent);
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.grid .card { margin: 0; }
+.lesson-card { display: flex; flex-direction: column; gap: 10px; transition: transform 0.25s, border-color 0.25s; }
+.lesson-card:hover { transform: translateY(-2px); border-color: rgba(230, 200, 121, 0.35); }
+.lesson-card .title { color: var(--text); font-size: 17px; }
+
+/* Pills */
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.pill.ok { color: var(--gold); border-color: rgba(230, 200, 121, 0.35); }
+.pill.ok::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px rgba(230, 200, 121, 0.7); }
+.pill.warn { color: var(--danger); border-color: rgba(255, 138, 138, 0.35); }
+
+/* The spinning-border button: a conic beam runs round the edge on hover. */
+.beam {
+  position: relative; display: inline-flex; overflow: hidden; border-radius: 999px; padding: 1px;
+  border: 0; background: none; cursor: pointer; transition: transform 0.3s, box-shadow 0.3s; vertical-align: middle;
+}
+.beam::before {
+  content: ""; position: absolute; inset: -100%;
+  background: conic-gradient(from 90deg at 50% 50%, transparent 0%, transparent 75%, var(--gold) 100%);
+  opacity: 0; transition: opacity 0.3s; animation: vl-spin 3s linear infinite;
+}
+.beam::after { content: ""; position: absolute; inset: 0; border-radius: 999px; background: #27272a; transition: opacity 0.3s; }
+.beam > span {
+  position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 20px; border-radius: 999px; font-family: inherit; font-size: 12px; font-weight: 500; line-height: 1; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #a1a1aa; background: linear-gradient(to bottom, #27272a, #09090b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: color 0.3s;
+}
+.beam:hover { transform: translateY(-2px); box-shadow: 0 0 25px rgba(255, 255, 255, 0.1); }
+.beam:hover::before { opacity: 1; }
+.beam:hover::after { opacity: 0; }
+.beam:hover > span { color: #fff; }
+.beam.small > span { padding: 6px 14px; font-size: 11px; }
+@keyframes vl-spin { to { transform: rotate(360deg); } }
+
+/* Gold outline button (the constellation CTA) */
+.gold-btn { display: inline-block; padding: 1px; border-radius: 999px; background: linear-gradient(to bottom right, rgba(230, 200, 121, 0.4), transparent); }
+.gold-btn > * { display: block; background: rgba(14, 18, 34, 0.85); color: var(--gold); border: 0; border-radius: 999px; padding: 9px 20px; font-family: inherit; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer; }
+.gold-btn:hover > * { color: var(--text); }
+
+/* Inputs */
+input[type=text], input[type=search], input[type=password], input[type=file], input:not([type]) {
+  width: 100%; padding: 10px 14px; color: var(--text); font: inherit;
+  background: rgba(7, 9, 20, 0.6); border: 1px solid var(--border); border-radius: 999px; outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+}
+input:focus { border-color: rgba(127, 196, 255, 0.5); box-shadow: 0 0 0 3px rgba(127, 196, 255, 0.12); }
+input[type=file] { border-radius: 10px; color: var(--muted); cursor: pointer; }
+input[type=file]::file-selector-button {
+  margin-right: 14px; padding: 7px 16px; border: 1px solid rgba(230, 200, 121, 0.35); border-radius: 999px; cursor: pointer;
+  font-family: inherit; font-size: 11px; font-weight: 500; line-height: 1; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--gold); background: linear-gradient(to bottom, #27272a, #09090b); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: color 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+input[type=file]:hover::file-selector-button { color: var(--text); border-color: var(--gold); box-shadow: 0 0 18px rgba(230, 200, 121, 0.25); }
+.row { display: flex; gap: 10px; align-items: center; }
+.row > input { flex: 1; min-width: 0; }
+.row > button { flex-shrink: 0; }
+form p { margin: 0 0 12px; }
+label { display: block; color: var(--muted); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.helptext { display: block; color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* Player */
+.player-shell { padding: 8px; }
+.player-shell video { display: block; width: 100%; border-radius: 10px; background: #000; aspect-ratio: 16 / 9; }
+.status { min-height: 1.4em; color: var(--muted); font-size: 13px; margin: 10px 4px 0; }
+
+/* Search hits */
+.hit { display: flex; gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--border); }
+.hit:first-of-type { border-top: 0; }
+.hit .time { color: var(--gold); font: 12px ui-monospace, monospace; min-width: 48px; }
+mark { background: rgba(230, 200, 121, 0.18); color: var(--gold); border-radius: 3px; padding: 0 2px; }
+
+/* Stats and heatmap */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: rgba(7, 9, 20, 0.45); }
+.stat b { display: block; font-size: 26px; font-weight: 300; color: var(--text); }
+.stat span { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.heat { display: flex; align-items: flex-end; gap: 3px; height: 140px; margin: 18px 0 8px; }
+.heat div { flex: 1; min-height: 2px; border-radius: 3px 3px 0 0; background: linear-gradient(to top, rgba(127, 196, 255, 0.35), var(--gold)); box-shadow: 0 0 10px rgba(230, 200, 121, 0.15); }
+.insight { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.insight:first-of-type { border-top: 0; }
+.insight .dot { width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: var(--sky); box-shadow: 0 0 10px rgba(127, 196, 255, 0.7); flex: none; }
+.insight .dot.gold { background: var(--gold); box-shadow: 0 0 10px rgba(230, 200, 121, 0.7); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-weight: 400; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 8px; }
+td { padding: 10px 8px; border-top: 1px solid var(--border); }
+.bar { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); overflow: hidden; min-width: 90px; }
+.bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--sky), var(--gold)); }
+
+/* Direct upload progress */
+.upload-progress { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border: 0; border-radius: 99px; overflow: hidden; background: rgba(255, 255, 255, 0.06); margin: 4px 0 12px; }
+.upload-progress::-webkit-progress-bar { background: rgba(255, 255, 255, 0.06); }
+.upload-progress::-webkit-progress-value { background: linear-gradient(90deg, var(--sky), var(--gold)); box-shadow: 0 0 12px rgba(230, 200, 121, 0.5); transition: width 0.2s; }
+.upload-progress::-moz-progress-bar { background: linear-gradient(90deg, var(--sky), var(--gold)); }
+.upload-error { color: var(--danger); font-size: 13px; margin: 0 0 10px; }
+.upload-error:empty { display: none; }
+.errorlist { list-style: none; padding: 0; margin: 0 0 8px; color: var(--danger); font-size: 13px; }
+
+ul.messages { list-style: none; padding: 0; margin: 0 0 16px; }
+ul.messages li { padding: 10px 14px; border: 1px solid rgba(230, 200, 121, 0.3); border-radius: 10px; color: var(--gold); background: rgba(230, 200, 121, 0.06); }
+.center { display: grid; place-items: center; min-height: 70vh; }
+@media (max-width: 640px) { .nav-search { display: none; } main { padding-top: 20px; } }
+@media (prefers-reduced-motion: reduce) { .beam::before { animation: none; } .lesson-card, .beam { transition: none; } }
+
+/* ── Motion ────────────────────────────────────────────────────────────────
+ * Everything below moves; all of it stops for prefers-reduced-motion.
+ */
+
+/* Aurora: slow coloured light drifting behind the stars. */
+.aurora { position: fixed; inset: 0; z-index: -3; overflow: hidden; pointer-events: none; }
+.aurora i { position: absolute; width: 60vmax; height: 60vmax; border-radius: 50%; filter: blur(90px); opacity: 0.22; mix-blend-mode: screen; }
+.aurora i:nth-child(1) { background: #3b5bdb; left: -20vmax; top: -25vmax; animation: vl-drift-a 26s ease-in-out infinite alternate; }
+.aurora i:nth-child(2) { background: #e6c879; right: -25vmax; top: 10vh; opacity: 0.12; animation: vl-drift-b 32s ease-in-out infinite alternate; }
+.aurora i:nth-child(3) { background: #7fc4ff; left: 20vw; bottom: -35vmax; opacity: 0.16; animation: vl-drift-c 38s ease-in-out infinite alternate; }
+@keyframes vl-drift-a { to { transform: translate(30vw, 20vh) scale(1.2); } }
+@keyframes vl-drift-b { to { transform: translate(-35vw, 30vh) scale(0.85); } }
+@keyframes vl-drift-c { to { transform: translate(25vw, -30vh) scale(1.15); } }
+
+/* A soft light that follows the pointer. */
+.glow { position: fixed; left: 0; top: 0; width: 520px; height: 520px; margin: -260px 0 0 -260px; border-radius: 50%; pointer-events: none; z-index: -1;
+  background: radial-gradient(circle, rgba(127, 196, 255, 0.10), rgba(230, 200, 121, 0.05) 40%, transparent 70%);
+  transform: translate3d(var(--gx, -999px), var(--gy, -999px), 0); transition: opacity 0.4s; }
+
+/* Entrance: each block rises into place, one after another. */
+.rise { animation: vl-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(var(--i, 0) * 90ms); }
+@keyframes vl-rise { from { opacity: 0; transform: translateY(24px) scale(0.985); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+
+/* Gold words shimmer. */
+h1 em {
+  background: linear-gradient(100deg, var(--gold) 20%, #fff6d8 40%, var(--gold) 60%, #c9a44f 80%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: vl-shimmer 5s linear infinite;
+}
+@keyframes vl-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+
+/* The brand dot breathes. */
+.brand-mark::before { animation: vl-breathe 2.8s ease-in-out infinite; }
+@keyframes vl-breathe { 50% { transform: scale(1.35); box-shadow: 0 0 22px rgba(230, 200, 121, 0.9); } }
+
+/* Cards: a spotlight under the pointer; lesson cards tilt towards it. */
+.card { background:
+  radial-gradient(420px circle at var(--mx, -999px) var(--my, -999px), rgba(230, 200, 121, 0.09), transparent 45%),
+  linear-gradient(to bottom, rgba(18, 24, 50, 0.72), rgba(14, 18, 34, 0.72)); }
+.lesson-card { transform-style: preserve-3d; transition: transform 0.2s ease-out, border-color 0.25s, box-shadow 0.25s; }
+.lesson-card:hover { transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-4px); box-shadow: var(--shadow), 0 20px 60px -20px rgba(230, 200, 121, 0.25); }
+
+/* The player sits in a ring of light that turns. */
+@property --vl-angle { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.player-shell::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: conic-gradient(from var(--vl-angle), transparent 0 70%, var(--sky) 80%, var(--gold) 90%, transparent 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  animation: vl-turn 6s linear infinite;
+}
+.player-shell { box-shadow: var(--shadow), 0 0 80px -30px rgba(127, 196, 255, 0.35); }
+@keyframes vl-turn { to { --vl-angle: 360deg; } }
+
+/* Report: bars grow, progress fills, numbers count up (motion.js). */
+.heat div { transform-origin: bottom; animation: vl-grow 1s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(300ms + var(--i, 0) * 45ms); transition: filter 0.2s; }
+.heat div:hover { filter: brightness(1.35); }
+@keyframes vl-grow { from { transform: scaleY(0); } }
+.bar i { transform-origin: left; animation: vl-fill 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s both; }
+@keyframes vl-fill { from { transform: scaleX(0); } }
+.stat { transition: transform 0.25s, border-color 0.25s; }
+.stat:hover { transform: translateY(-3px); border-color: rgba(127, 196, 255, 0.35); }
+
+/* Search hits slide in; the dot of an insight pulses. */
+.hit { animation: vl-slide 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(200ms + var(--i, 0) * 80ms); transition: background 0.2s; border-radius: 8px; }
+a.hit:hover { background: rgba(127, 196, 255, 0.05); }
+@keyframes vl-slide { from { opacity: 0; transform: translateX(-16px); } }
+.insight .dot { animation: vl-ping 2.4s ease-out infinite; }
+@keyframes vl-ping { 0% { box-shadow: 0 0 0 0 rgba(127, 196, 255, 0.55); } 70%, 100% { box-shadow: 0 0 0 10px rgba(127, 196, 255, 0); } }
+.insight .dot.gold { animation-name: vl-ping-gold; }
+@keyframes vl-ping-gold { 0% { box-shadow: 0 0 0 0 rgba(230, 200, 121, 0.6); } 70%, 100% { box-shadow: 0 0 0 10px rgba(230, 200, 121, 0); } }
+
+/* Buttons lean towards the pointer (motion.js) and send a ripple when pressed. */
+.beam, .gold-btn { will-change: transform; }
+.ripple { position: absolute; border-radius: 50%; pointer-events: none; z-index: 2; background: rgba(255, 255, 255, 0.35); transform: scale(0); animation: vl-ripple 0.6s ease-out forwards; }
+@keyframes vl-ripple { to { transform: scale(4); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .glow, .aurora { display: none; }
+}
+
+.preview-bar{position:relative;z-index:30;display:flex;flex-wrap:wrap;gap:6px 14px;justify-content:center;align-items:center;padding:8px 16px;font-size:12px;letter-spacing:.04em;color:var(--muted);background:rgba(230,200,121,.07);border-bottom:1px solid rgba(230,200,121,.2);text-align:center}
+.preview-bar b{color:var(--gold);font-weight:500;letter-spacing:.14em;text-transform:uppercase;font-size:11px}
+.video-wrap{position:relative;overflow:hidden;border-radius:10px}
+.demo-mark{position:absolute;left:50%;top:45%;pointer-events:none;font:600 clamp(11px,2vw,20px)/1 system-ui,sans-serif;color:rgba(255,255,255,.55);text-shadow:0 1px 3px rgba(0,0,0,.6);white-space:nowrap;animation:mark-drift 18s ease-in-out infinite alternate}
+@keyframes mark-drift{0%{transform:translate(-90%,-180%)}50%{transform:translate(-30%,60%)}100%{transform:translate(-10%,-140%)}}
+.preview-note{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:40;padding:10px 16px;border-radius:12px;background:rgba(14,18,34,.95);border:1px solid var(--border);color:var(--text);font-size:13px;box-shadow:var(--shadow)}
+@media (prefers-reduced-motion: reduce){.demo-mark{animation:none}}

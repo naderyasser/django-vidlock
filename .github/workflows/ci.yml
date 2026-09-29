@@ -91,6 +91,7 @@ jobs:
           python manage.py makemigrations --check --dry-run
           python manage.py test lessons
           python manage.py migrate -v0 && python manage.py demo && python manage.py vidlock_doctor --offline
+          python manage.py build_site /tmp/site && test -s /tmp/site/index.html && test -s /tmp/site/lesson.mp4
 
   package:
     runs-on: ubuntu-latest
