@@ -20,11 +20,10 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
-html { background: var(--page); }
+html { background: radial-gradient(ellipse at center, #0e1222 0%, var(--page) 100%) fixed var(--page); }
 body {
   font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Arabic", sans-serif;
   color: var(--text);
-  background: radial-gradient(ellipse at center, #0e1222 0%, var(--page) 100%) fixed;
 }
 ::selection { background: rgba(127, 196, 255, 0.3); color: var(--sky); }
 a { color: var(--sky); text-decoration: none; }

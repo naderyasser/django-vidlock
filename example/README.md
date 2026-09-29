@@ -32,6 +32,8 @@ The demo keeps videos in `example/media/` and serves them through Django
 (`vidlock.contrib.devstorage`), which only works with `DEBUG = True`. A real
 site uses an S3-compatible bucket such as Cloudflare R2; see the main README.
 
+![The demo](../docs/screenshots/watch.png)
+
 The demo's look (palette, glass cards, the spinning-border button and the
 constellation background in `lessons/static/lessons/`) is adapted from
 [ThreeUI](https://github.com/MengTo/threeui) by Meng To, MIT licensed.

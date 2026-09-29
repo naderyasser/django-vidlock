@@ -17,6 +17,10 @@ Viewers watch in hls.js, Safari, iOS, ExoPlayer or AVPlayer.
 
 [العربية ↓](#بالعربي)
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/watch.png" alt="A sealed lesson playing with the viewer's watermark, and search inside the lesson" width="820">
+</p>
+
 ---
 
 ## The problem
@@ -118,6 +122,10 @@ no Redis:
 ```bash
 cd example && pip install -e .. && python manage.py migrate && python manage.py demo && python manage.py runserver
 ```
+
+| Lessons | Teacher report | Search (phone) |
+| --- | --- | --- |
+| <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/lessons.png" alt="Lesson list" width="300"> | <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/report.png" alt="Teacher report: viewers, heatmap, insights" width="300"> | <img src="https://raw.githubusercontent.com/naderyasser/django-vidlock/main/docs/screenshots/mobile-search.png" alt="Search inside every lesson on a phone" width="150"> |
 
 ## Requirements
 
