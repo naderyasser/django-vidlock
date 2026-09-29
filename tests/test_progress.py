@@ -104,3 +104,17 @@ def test_the_admin_lists_it(admin_client, client, lesson, student):
     beat(client, lesson, student, watched=[[0, 25]])
     page = admin_client.get('/admin/vidlock/watchprogress/')
     assert page.status_code == 200 and '100%' in page.content.decode()
+
+
+def test_a_play_cut_into_pieces_by_heartbeats_still_counts(client, lesson, student):
+    # Heartbeats every 2 s cut 0-12 s into pieces shorter than a bucket needs.
+    now = time.time()
+    for n, (start, stop) in enumerate([(0, 2), (2, 4), (4, 6), (6, 8), (8, 10), (10, 12), (12, 13.5)]):
+        with mock.patch('vidlock.progress.time.time', return_value=now + 2 * n):
+            beat(client, lesson, student, watched=[[start, stop]])
+    got = row(student, lesson)
+    assert got.buckets == [1, 1], 'each bucket once, not once per piece'
+    # Seeking back and watching again is a replay.
+    with mock.patch('vidlock.progress.time.time', return_value=now + 60):
+        beat(client, lesson, student, watched=[[0, 9]])
+    assert row(student, lesson).buckets == [2, 1]

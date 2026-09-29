@@ -19,6 +19,7 @@ anything beyond is dropped. It is analytics, not proof.
 
 from __future__ import annotations
 
+import contextlib
 import math
 import time
 
@@ -31,6 +32,9 @@ MAX_SPEED = 2.5
 #: A seconds allowance per heartbeat on top of the elapsed time (clock skew,
 #: the first heartbeat of a page).
 SLACK = 45
+#: Seconds between one reported piece's end and the next one's start that
+#: still make them one continuous play.
+JOIN_GAP = 1.5
 #: A bucket counts as watched when one stretch covers this much of it, so a
 #: second of skimming past does not.
 MIN_OVERLAP = 3.0
@@ -92,16 +96,28 @@ def record(user, video, watched, position=None) -> None:
             user=user, video_type=label, video_id=video_id
         )
         buckets = list(row.buckets or [])
+        run_key = f'vidlock:progress:run:{user.pk}:{label}:{video_id}'
+        try:
+            run = cache.get(run_key)
+        except Exception:
+            run = None
         for start, stop in kept:
-            first, last = int(start // size), int(max(start, stop - 1e-6) // size)
-            for index in range(first, last + 1):
-                overlap = min(stop, (index + 1) * size) - max(start, index * size)
-                # The video's last bucket may be shorter than MIN_OVERLAP.
-                length = min(size, duration - index * size) if duration else size
-                if overlap >= min(MIN_OVERLAP, length) - 1e-6:
-                    if len(buckets) <= index:
-                        buckets.extend([0] * (index + 1 - len(buckets)))
-                    buckets[index] += 1
+            # The player cuts a continuous play into pieces at each heartbeat;
+            # a piece that picks up where the last one stopped continues it,
+            # so a bucket split across two heartbeats still counts, once.
+            if run and abs(start - run['end']) <= JOIN_GAP:
+                run['end'] = max(run['end'], stop)
+            else:
+                run = {'start': start, 'end': stop, 'counted': []}
+            for index in _covered(run['start'], run['end'], size, duration):
+                if index in run['counted']:
+                    continue
+                run['counted'].append(index)
+                if len(buckets) <= index:
+                    buckets.extend([0] * (index + 1 - len(buckets)))
+                buckets[index] += 1
+        with contextlib.suppress(Exception):
+            cache.set(run_key, run, 3600)
         row.buckets = buckets
         row.seconds_watched += total
         if duration:
@@ -109,6 +125,18 @@ def record(user, video, watched, position=None) -> None:
         if isinstance(position, (int, float)) and math.isfinite(position) and position >= 0:
             row.position = float(position)
         row.save()
+
+
+def _covered(start: float, stop: float, size: int, duration: float) -> list[int]:
+    """Buckets that ``[start, stop]`` covers for at least MIN_OVERLAP seconds
+    (the video's last, shorter bucket needs less)."""
+    found = []
+    for index in range(int(start // size), int(max(start, stop - 1e-6) // size) + 1):
+        overlap = min(stop, (index + 1) * size) - max(start, index * size)
+        length = min(size, duration - index * size) if duration else size
+        if overlap >= min(MIN_OVERLAP, length) - 1e-6:
+            found.append(index)
+    return found
 
 
 def report(video, complete_at: float = 0.9) -> dict:
