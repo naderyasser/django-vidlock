@@ -127,6 +127,8 @@ cd example && pip install -e .. && python manage.py migrate && python manage.py 
 | --- | --- | --- |
 | <img src="docs/screenshots/watch.png" alt="A sealed lesson playing with the watermark, and search inside it" width="300"> | <img src="docs/screenshots/report.png" alt="Teacher report: viewers, heatmap, insights" width="300"> | <img src="docs/screenshots/mobile-search.png" alt="Search inside every lesson on a phone" width="150"> |
 
+<p align="center"><img src="docs/screenshots/home.png" alt="The home page: lessons, and the teacher's direct upload to the bucket" width="820"></p>
+
 ## Requirements
 
 * Python 3.10+ and Django 4.2, 5.x or 6.0
