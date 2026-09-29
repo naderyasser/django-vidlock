@@ -128,10 +128,10 @@ def test_a_sealed_video_is_keyed_decrypted_and_watermarked(watching, live_server
         page.evaluate("document.getElementById('player').pause()")
         for _ in range(40):
             report = page.request.get(f'{base}/report/{lesson.pk}/').json()
-            if report['viewers']:
+            if any(report['heatmap']):
                 break
             page.wait_for_timeout(250)
-        assert report['viewers'] == 1 and report['hours_watched'] > 0 and any(report['heatmap']), report
+        assert report['viewers'] == 1 and report['seconds_watched'] > 5 and any(report['heatmap']), report
 
     for _ in range(40):
         if 200 in seen['beats']:

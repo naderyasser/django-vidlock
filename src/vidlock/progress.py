@@ -128,6 +128,7 @@ def report(video, complete_at: float = 0.9) -> dict:
         'viewers': len(rows),
         'completed': sum(1 for c in completions if c >= complete_at),
         'average_completion': round(sum(completions) / len(completions), 3) if completions else 0.0,
+        'seconds_watched': round(sum(row.seconds_watched for row in rows), 1),
         'hours_watched': round(sum(row.seconds_watched for row in rows) / 3600, 2),
         'bucket_seconds': size,
         'heatmap': heatmap,
