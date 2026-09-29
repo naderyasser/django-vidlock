@@ -13,6 +13,15 @@
   <div class="muted">Each bar is {{ data.bucket_seconds }} seconds of the lesson; taller means played more.</div>
 </div>
 <div class="card">
+  <h3>What to do next</h3>
+  {% if insights.not_started %}<p><strong>{{ insights.not_started|length }}</strong> haven't started: {{ insights.not_started|join:", " }}</p>{% endif %}
+  {% if insights.stalled %}<p><strong>{{ insights.stalled|length }}</strong> stopped and haven't come back for a week: {{ insights.stalled|join:", " }}</p>{% endif %}
+  {% if insights.drop_off_at is not None %}<p>Most who stop, stop around <strong>{{ insights.drop_off_at }} s</strong>.</p>{% endif %}
+  {% for at, ratio in insights.confusing %}<p>The part at <strong>{{ at }} s</strong> is replayed {{ ratio }}× more than the rest: worth explaining again?</p>{% endfor %}
+  {% if not insights.not_started and not insights.stalled and insights.drop_off_at is None and not insights.confusing %}<p class="muted">Nothing needs your attention yet.</p>{% endif %}
+  <p class="muted">Daily, by email or WhatsApp: <code>manage.py vidlock_insights --send --nudge</code></p>
+</div>
+<div class="card">
   <table>
     <tr><th>Viewer</th><th>Watched</th><th>Stopped at</th><th>Last seen</th></tr>
     {% for row in rows %}

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-vidlock\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"POT-Creation-Date: 2026-09-29 00:00+0000\n"
 "PO-Revision-Date: 2026-09-25 00:00+0000\n"
 "Last-Translator: django-vidlock contributors\n"
 "Language-Team: de\n"
@@ -48,14 +48,61 @@ msgstr[1] "%d Videos zum Versiegeln gesendet."
 msgid "Nothing to seal among the selected videos."
 msgstr "Unter den ausgewählten Videos gibt es nichts zu versiegeln."
 
+msgid "Watched"
+msgstr "Angesehen"
+
+msgid "Minutes"
+msgstr "Minuten"
+
 msgid "VidLock"
 msgstr "VidLock"
+
+#, python-format
+msgid ""
+"  %(finished)s of %(audience)s finished, %(started)s started, %(waiting)s "
+"not yet"
+msgstr ""
+"  %(finished)s von %(audience)s fertig, %(started)s begonnen, %(waiting)s "
+"noch nicht"
+
+#, python-format
+msgid "  %(finished)s finished of %(started)s who started"
+msgstr "  %(finished)s fertig von %(started)s, die begonnen haben"
+
+#, python-format
+msgid "  %(count)s stopped and have not come back for %(days)s days"
+msgstr ""
+"  %(count)s haben aufgehört und sind seit %(days)s Tagen nicht "
+"zurückgekommen"
+
+#, python-format
+msgid "  most who stop, stop around %(at)s"
+msgstr "  die meisten, die aufhören, hören bei etwa %(at)s auf"
+
+#, python-format
+msgid ""
+"  %(at)s is replayed %(ratio)sx more than the rest: worth explaining again?"
+msgstr ""
+"  %(at)s wird %(ratio)sx öfter wiederholt als der Rest: nochmal erklären?"
+
+#, python-format
+msgid "Lesson report: %s"
+msgstr "Lektionsbericht: %s"
+
+msgid "A lesson is waiting for you"
+msgstr "Eine Lektion wartet auf dich"
+
+#, python-format
+msgid "You have not started \"%s\" yet."
+msgstr "Du hast „%s“ noch nicht begonnen."
 
 msgid "This link has expired. Reload the page."
 msgstr "Dieser Link ist abgelaufen. Laden Sie die Seite neu."
 
 msgid "Playback is paused on this account. Please contact support."
-msgstr "Die Wiedergabe ist für dieses Konto pausiert. Bitte wenden Sie sich an den Support."
+msgstr ""
+"Die Wiedergabe ist für dieses Konto pausiert. Bitte wenden Sie sich an den "
+"Support."
 
 msgid "This account is watching on another device."
 msgstr "Dieses Konto schaut auf einem anderen Gerät."

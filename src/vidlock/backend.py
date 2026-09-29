@@ -39,6 +39,21 @@ class SealedBackend:
         """Text drawn over the video for this viewer, or None for none."""
         return None
 
+    def audience(self, video):
+        """The users expected to watch ``video`` (its course's enrolments), for
+        insights: who has not started. None: count only who did start."""
+        return None
+
+    def teachers(self, video):
+        """Who receives ``video``'s insights (``manage.py vidlock_insights
+        --send``). Default: none."""
+        return []
+
+    def phone(self, user) -> str | None:
+        """A user's phone in international format (``+201001234567``), for the
+        WhatsApp notifier."""
+        return None
+
     def client_ip(self, request) -> str:
         """The viewer's address, for the risk score's network count. Behind a
         proxy or CDN, return the header it sets (e.g. CF-Connecting-IP) —

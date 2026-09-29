@@ -140,3 +140,25 @@ class WatchProgress(models.Model):
     @property
     def bucket_count(self) -> int:
         return math.ceil(self.duration / self.BUCKET_SECONDS) if self.duration else len(self.buckets)
+
+
+class Transcript(models.Model):
+    """What is said in one video, with times (``vidlock.transcribe``)."""
+
+    video_type = models.CharField(max_length=100)
+    video_id = models.CharField(max_length=64)
+    language = models.CharField(max_length=16, blank=True, default='')
+    #: ``[{'start': 1.2, 'end': 4.8, 'text': '...'}]``
+    segments = models.JSONField(default=list, blank=True)
+    text = models.TextField(blank=True, default='')
+    #: ``text`` folded for search (case, accents, Arabic variants).
+    search_text = models.TextField(blank=True, default='', editable=False)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = (
+            models.UniqueConstraint(fields=('video_type', 'video_id'), name='vidlock_transcript_once'),
+        )
+
+    def __str__(self):
+        return f'{self.video_type} {self.video_id} ({self.language or "?"})'

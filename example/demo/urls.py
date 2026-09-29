@@ -6,6 +6,7 @@ from lessons import views
 urlpatterns = [
     path('', views.lesson_list, name='lessons'),
     path('lessons/<int:pk>/', views.watch, name='watch'),
+    path('search/', views.search, name='search'),
     path('lessons/<int:pk>/playback/', views.playback, name='playback'),
     path('lessons/<int:pk>/report/', views.report, name='report'),
     path('login/', auth.LoginView.as_view(template_name='lessons/login.html'), name='login'),

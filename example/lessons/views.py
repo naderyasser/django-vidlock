@@ -9,8 +9,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from lessons.backend import LessonBackend
 from lessons.models import Lesson
-from vidlock import progress
-from vidlock.models import WatchProgress
+from vidlock import insights, progress, transcribe
+from vidlock.models import Transcript, WatchProgress
 from vidlock.pipeline import seal_later
 from vidlock.storage import default_storage
 from vidlock.views import playback_info
@@ -45,7 +45,25 @@ def lesson_list(request):
 
 @login_required
 def watch(request, pk):
-    return render(request, 'lessons/watch.html', {'lesson': get_object_or_404(Lesson, pk=pk)})
+    lesson = get_object_or_404(Lesson, pk=pk)
+    query = request.GET.get('q', '').strip()
+    hits = transcribe.search(query, videos=[lesson]) if query else []
+    has_transcript = Transcript.objects.filter(video_type='lessons.Lesson', video_id=str(lesson.pk)).exists()
+    return render(
+        request,
+        'lessons/watch.html',
+        {'lesson': lesson, 'query': query, 'hits': hits, 'has_transcript': has_transcript},
+    )
+
+
+@login_required
+def search(request):
+    query = request.GET.get('q', '').strip()
+    hits = transcribe.search(query) if query else []
+    titles = {str(lesson.pk): lesson.title for lesson in Lesson.objects.all()}
+    for hit in hits:
+        hit['title'] = titles.get(hit['video_id'], '?')
+    return render(request, 'lessons/search.html', {'query': query, 'hits': hits})
 
 
 @login_required
@@ -72,6 +90,9 @@ def report(request, pk):
     rows = WatchProgress.objects.select_related('user').filter(
         video_type='lessons.Lesson', video_id=str(lesson.pk)
     )
+    found = insights.for_video(lesson)
     return render(
-        request, 'lessons/report.html', {'lesson': lesson, 'data': data, 'bars': bars, 'rows': rows}
+        request,
+        'lessons/report.html',
+        {'lesson': lesson, 'data': data, 'bars': bars, 'rows': rows, 'insights': found},
     )

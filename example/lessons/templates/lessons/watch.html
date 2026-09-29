@@ -10,11 +10,23 @@
   open this lesson in another browser signed in as the same user (this one stops);
   fullscreen it (the watermark stays).
 </div>
+{% if has_transcript %}
+<div class="card">
+  <form method="get"><input name="q" value="{{ query }}" placeholder="Search what is said in this lesson…" style="width:70%;padding:8px;border:1px solid var(--line);border-radius:8px"> <button>Search</button></form>
+  {% if query %}
+    {% for hit in hits %}
+      <p><button type="button" onclick="player.seek({{ hit.start }})">▶ {{ hit.start|floatformat:0 }} s</button> {{ hit.text }}</p>
+    {% empty %}<p class="muted">Not said in this lesson.</p>{% endfor %}
+  {% endif %}
+</div>
+{% endif %}
 {% vidlock_player %}
 <script>
-  VidLock.attach(document.getElementById('player'), {
+  window.player = VidLock.attach(document.getElementById('player'), {
     endpoint: '{% url "playback" lesson.pk %}',
     onStatus: (message) => { document.getElementById('status').textContent = message || ''; },
   });
+  const jump = location.hash.match(/t=([\d.]+)/);
+  if (jump) player.seek(parseFloat(jump[1]));
 </script>
 {% endblock %}

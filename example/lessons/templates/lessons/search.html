@@ -1,0 +1,11 @@
+{% extends 'lessons/base.html' %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<h1>Search inside every lesson</h1>
+<form method="get" class="card"><input name="q" value="{{ query }}" autofocus placeholder="A word or a phrase, in any language…" style="width:70%;padding:8px;border:1px solid var(--line);border-radius:8px"> <button>Search</button></form>
+{% if query %}
+  {% for hit in hits %}
+    <div class="card"><a href="{% url 'watch' hit.video_id %}#t={{ hit.start }}"><strong>{{ hit.title }}</strong> · {{ hit.start|floatformat:0 }} s</a><div>{{ hit.text }}</div></div>
+  {% empty %}<p class="muted">Nothing found.</p>{% endfor %}
+{% endif %}
+{% endblock %}

@@ -60,4 +60,18 @@ VIDLOCK = {
     'KEY_ENCRYPTION_KEYS': ['demo-key-encryption-secret'],
     # Open the same lesson in a second browser: the first one stops.
     'MAX_STREAMS': 1,
+    # Insights are printed by manage.py vidlock_insights; with a notifier set
+    # they are sent. The console email backend below shows them in the terminal.
+    'NOTIFIER': 'vidlock.notify.email',
 }
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Captions and search inside lessons, when faster-whisper is installed
+# (pip install "django-vidlock[transcribe]"). The small model is fine for a
+# demo; use 'small' or 'medium' for real Arabic lessons.
+try:
+    import faster_whisper  # noqa: F401
+
+    VIDLOCK.update({'TRANSCRIBER': 'vidlock.transcribe.FasterWhisper', 'TRANSCRIBE_MODEL': 'base'})
+except ImportError:
+    pass

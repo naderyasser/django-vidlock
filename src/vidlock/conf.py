@@ -95,6 +95,26 @@ DEFAULTS: dict[str, Any] = {
     # Networks (/24, /48) one viewer may come from in a day before each new
     # one counts towards the risk score. None: not counted.
     'MAX_NETWORKS_PER_DAY': 6,
+    # Transcribe every sealed video (captions, search): a dotted path such as
+    # 'vidlock.transcribe.FasterWhisper' (pip install django-vidlock[transcribe]).
+    'TRANSCRIBER': None,
+    # Whisper model (tiny, base, small, medium, large-v3) and the spoken
+    # language ('ar', 'en', …; None detects it).
+    'TRANSCRIBE_MODEL': 'small',
+    'TRANSCRIBE_LANGUAGE': None,
+    # How insights and reminders are sent (vidlock.notify): a dotted path to
+    # fn(users, subject, message) — 'vidlock.notify.email', '.webhook' or
+    # '.whatsapp'. None: manage.py vidlock_insights only prints.
+    'NOTIFIER': None,
+    'NOTIFY_WEBHOOK_URL': '',
+    # WhatsApp Cloud API (Meta): access token, sender phone number id, and an
+    # approved template (one body variable) for messages outside a 24-hour
+    # conversation.
+    'WHATSAPP_TOKEN': '',
+    'WHATSAPP_PHONE_NUMBER_ID': '',
+    'WHATSAPP_TEMPLATE': '',
+    'WHATSAPP_TEMPLATE_LANGUAGE': 'ar',
+    'WHATSAPP_API_VERSION': 'v21.0',
     # Record who watched what (vidlock.progress, the WatchProgress model) from
     # the player's heartbeat.
     'TRACK_PROGRESS': True,

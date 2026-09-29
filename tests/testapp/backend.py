@@ -13,6 +13,17 @@ class LessonBackend(SealedBackend):
     def can_watch(self, user, video):
         return video.students.filter(pk=user.pk).exists()
 
+    def audience(self, video):
+        return list(video.students.all())
+
+    def teachers(self, video):
+        from django.contrib.auth import get_user_model
+
+        return list(get_user_model().objects.filter(is_staff=True))
+
+    def phone(self, user):
+        return getattr(user, 'first_name', '') or None
+
     def watermark(self, user, video):
         return user.get_username() if WATERMARK else None
 

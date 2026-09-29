@@ -1,6 +1,7 @@
 {% extends 'lessons/base.html' %}
 {% block content %}
 <h1>Lessons</h1>
+<form method="get" action="{% url 'search' %}"><input name="q" placeholder="Search inside every lesson…" style="width:60%;padding:8px;border:1px solid var(--line);border-radius:8px"> <button>Search</button></form>
 {% for lesson in lessons %}
   <div class="card">
     <a href="{% url 'watch' lesson.pk %}"><strong>{{ lesson.title }}</strong></a>

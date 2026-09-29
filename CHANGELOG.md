@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.0 — 2026-09-29
+
+### Captions and search inside lessons
+
+* `TRANSCRIBER = 'vidlock.transcribe.FasterWhisper'`: every sealed video
+  is transcribed with Whisper on your own worker, after it goes live. A
+  failure never fails the seal. The `Transcript` model stores the segments;
+  run `migrate`.
+* The player adds a captions track (WebVTT behind the playlist's token);
+  `playback_info` returns `captions_url`.
+* `transcribe.search()` finds the moment a phrase is said, folding Arabic
+  spelling variants. `player.seek(seconds)` jumps there.
+* `manage.py vidlock_transcribe` for videos sealed before; the
+  `transcript_ready` signal.
+
+### Teacher insights
+
+* `insights.for_video()` gives who has not started, who stalled, the
+  drop-off point and the replayed ("confusing") parts. `digest()` turns it
+  into text, translated.
+* `vidlock.notify` sends by email, WhatsApp Cloud API or webhook.
+  `manage.py vidlock_insights --send --nudge` reports to teachers and
+  reminds students.
+* `SealedBackend.audience()`, `teachers()` and `phone()`.
+
+### Demo
+
+* A narrated sample lesson; search inside lessons; insights on the report
+  page.
+
 ## 0.5.0 — 2026-09-29
 
 ### Security (from an independent review)

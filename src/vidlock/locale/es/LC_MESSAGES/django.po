@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-vidlock\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"POT-Creation-Date: 2026-09-29 00:00+0000\n"
 "PO-Revision-Date: 2026-09-25 00:00+0000\n"
 "Last-Translator: django-vidlock contributors\n"
 "Language-Team: es\n"
@@ -13,8 +13,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
-"1 : 2;\n"
+"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;\n"
 
 msgid "Protection"
 msgstr "Protección"
@@ -50,8 +49,52 @@ msgstr[2] "%d vídeos enviados para sellar."
 msgid "Nothing to seal among the selected videos."
 msgstr "No hay nada que sellar entre los vídeos seleccionados."
 
+msgid "Watched"
+msgstr "Visto"
+
+msgid "Minutes"
+msgstr "Minutos"
+
 msgid "VidLock"
 msgstr "VidLock"
+
+#, python-format
+msgid ""
+"  %(finished)s of %(audience)s finished, %(started)s started, %(waiting)s "
+"not yet"
+msgstr ""
+"  %(finished)s de %(audience)s terminaron, %(started)s empezaron, "
+"%(waiting)s todavía no"
+
+#, python-format
+msgid "  %(finished)s finished of %(started)s who started"
+msgstr "  %(finished)s terminaron de %(started)s que empezaron"
+
+#, python-format
+msgid "  %(count)s stopped and have not come back for %(days)s days"
+msgstr "  %(count)s se detuvieron y no han vuelto en %(days)s días"
+
+#, python-format
+msgid "  most who stop, stop around %(at)s"
+msgstr "  la mayoría de quienes se detienen lo hacen hacia %(at)s"
+
+#, python-format
+msgid ""
+"  %(at)s is replayed %(ratio)sx more than the rest: worth explaining again?"
+msgstr ""
+"  %(at)s se repite %(ratio)sx más que el resto: ¿vale la pena explicarlo de "
+"nuevo?"
+
+#, python-format
+msgid "Lesson report: %s"
+msgstr "Informe de la lección: %s"
+
+msgid "A lesson is waiting for you"
+msgstr "Una lección te espera"
+
+#, python-format
+msgid "You have not started \"%s\" yet."
+msgstr "Todavía no has empezado «%s»."
 
 msgid "This link has expired. Reload the page."
 msgstr "Este enlace ha caducado. Recarga la página."

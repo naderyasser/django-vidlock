@@ -63,6 +63,18 @@ jobs:
         env:
           VIDLOCK_TEST_BROWSER_CHANNEL: chrome
 
+  transcribe:
+    # Real speech (espeak-ng) through Whisper tiny: captions and search.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -q && sudo apt-get install -yq ffmpeg espeak-ng
+      - run: pip install -e ".[test,transcribe]"
+      - run: pytest -q tests/test_transcribe.py
+
   demo:
     # The example site end to end: sample lesson sealed, played, reported.
     runs-on: ubuntu-latest

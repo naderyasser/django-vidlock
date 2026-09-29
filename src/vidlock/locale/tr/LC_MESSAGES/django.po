@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-vidlock\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"POT-Creation-Date: 2026-09-29 00:00+0000\n"
 "PO-Revision-Date: 2026-09-25 00:00+0000\n"
 "Last-Translator: django-vidlock contributors\n"
 "Language-Team: tr\n"
@@ -48,8 +48,52 @@ msgstr[1] "%d video mühürlemeye gönderildi."
 msgid "Nothing to seal among the selected videos."
 msgstr "Seçilen videolar arasında mühürlenecek bir şey yok."
 
+msgid "Watched"
+msgstr "İzlenen"
+
+msgid "Minutes"
+msgstr "Dakika"
+
 msgid "VidLock"
 msgstr "VidLock"
+
+#, python-format
+msgid ""
+"  %(finished)s of %(audience)s finished, %(started)s started, %(waiting)s "
+"not yet"
+msgstr ""
+"  %(audience)s kişiden %(finished)s bitirdi, %(started)s başladı, "
+"%(waiting)s henüz başlamadı"
+
+#, python-format
+msgid "  %(finished)s finished of %(started)s who started"
+msgstr "  başlayan %(started)s kişiden %(finished)s bitirdi"
+
+#, python-format
+msgid "  %(count)s stopped and have not come back for %(days)s days"
+msgstr "  %(count)s kişi durdu ve %(days)s gündür dönmedi"
+
+#, python-format
+msgid "  most who stop, stop around %(at)s"
+msgstr "  duranların çoğu %(at)s civarında duruyor"
+
+#, python-format
+msgid ""
+"  %(at)s is replayed %(ratio)sx more than the rest: worth explaining again?"
+msgstr ""
+"  %(at)s diğer kısımlardan %(ratio)s kat fazla tekrar izleniyor: yeniden "
+"anlatmaya değer mi?"
+
+#, python-format
+msgid "Lesson report: %s"
+msgstr "Ders raporu: %s"
+
+msgid "A lesson is waiting for you"
+msgstr "Seni bekleyen bir ders var"
+
+#, python-format
+msgid "You have not started \"%s\" yet."
+msgstr "\"%s\" dersine henüz başlamadın."
 
 msgid "This link has expired. Reload the page."
 msgstr "Bu bağlantının süresi doldu. Sayfayı yenileyin."

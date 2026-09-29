@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-vidlock\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"POT-Creation-Date: 2026-09-29 00:00+0000\n"
 "PO-Revision-Date: 2026-09-25 00:00+0000\n"
 "Last-Translator: django-vidlock contributors\n"
 "Language-Team: pt\n"
@@ -48,14 +48,58 @@ msgstr[1] "%d vídeos enviados para selagem."
 msgid "Nothing to seal among the selected videos."
 msgstr "Nada para selar entre os vídeos selecionados."
 
+msgid "Watched"
+msgstr "Assistido"
+
+msgid "Minutes"
+msgstr "Minutos"
+
 msgid "VidLock"
 msgstr "VidLock"
+
+#, python-format
+msgid ""
+"  %(finished)s of %(audience)s finished, %(started)s started, %(waiting)s "
+"not yet"
+msgstr ""
+"  %(finished)s de %(audience)s terminaram, %(started)s começaram, "
+"%(waiting)s ainda não"
+
+#, python-format
+msgid "  %(finished)s finished of %(started)s who started"
+msgstr "  %(finished)s terminaram de %(started)s que começaram"
+
+#, python-format
+msgid "  %(count)s stopped and have not come back for %(days)s days"
+msgstr "  %(count)s pararam e não voltaram há %(days)s dias"
+
+#, python-format
+msgid "  most who stop, stop around %(at)s"
+msgstr "  a maioria de quem para, para por volta de %(at)s"
+
+#, python-format
+msgid ""
+"  %(at)s is replayed %(ratio)sx more than the rest: worth explaining again?"
+msgstr ""
+"  %(at)s é revisto %(ratio)sx mais que o resto: vale explicar de novo?"
+
+#, python-format
+msgid "Lesson report: %s"
+msgstr "Relatório da aula: %s"
+
+msgid "A lesson is waiting for you"
+msgstr "Uma aula está esperando por você"
+
+#, python-format
+msgid "You have not started \"%s\" yet."
+msgstr "Você ainda não começou \"%s\"."
 
 msgid "This link has expired. Reload the page."
 msgstr "Este link expirou. Recarregue a página."
 
 msgid "Playback is paused on this account. Please contact support."
-msgstr "A reprodução está pausada nesta conta. Entre em contato com o suporte."
+msgstr ""
+"A reprodução está pausada nesta conta. Entre em contato com o suporte."
 
 msgid "This account is watching on another device."
 msgstr "Esta conta está assistindo em outro dispositivo."

@@ -12,3 +12,14 @@ class LessonBackend(SealedBackend):
 
     def watermark(self, user, video):
         return user.get_username()
+
+    def audience(self, video):
+        # A real site returns the course's enrolments; the demo: every student.
+        from django.contrib.auth import get_user_model
+
+        return list(get_user_model().objects.filter(is_staff=False, is_active=True))
+
+    def teachers(self, video):
+        from django.contrib.auth import get_user_model
+
+        return list(get_user_model().objects.filter(is_staff=True))

@@ -53,3 +53,38 @@ class DemoTests(TestCase):
         page = self.client.get(f'/lessons/{self.lesson.pk}/report/')
         self.assertContains(page, '<strong>1</strong> viewers')
         self.assertContains(page, 'student')
+
+
+class DemoFeatureTests(TestCase):
+    """Search and insights, with a transcript stored directly (no model needed)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        User.objects.create_user('teacher', password='demo', is_staff=True)
+        User.objects.create_user('student', password='demo')
+        User.objects.create_user('late', password='demo')
+        cls.lesson = Lesson.objects.create(title='Lenses', video_key='x.ts', sealed_state='sealed')
+
+    def test_search_inside_lessons(self):
+        from vidlock.models import Transcript
+
+        Transcript.objects.create(
+            video_type='lessons.Lesson',
+            video_id=str(self.lesson.pk),
+            segments=[{'start': 12.0, 'end': 15.0, 'text': 'The lens formula links u, v and f.'}],
+            text='The lens formula links u, v and f.',
+            search_text='the lens formula links u, v and f.',
+        )
+        self.client.login(username='student', password='demo')
+        page = self.client.get('/search/', {'q': 'Lens formula'})
+        self.assertContains(page, 'Lenses')
+        self.assertContains(page, f'/lessons/{self.lesson.pk}/#t=12.0')
+
+    def test_the_report_says_who_has_not_started(self):
+        self.client.login(username='teacher', password='demo')
+        page = self.client.get(f'/lessons/{self.lesson.pk}/report/')
+        self.assertContains(page, "haven't started")
+        self.assertContains(page, 'late')

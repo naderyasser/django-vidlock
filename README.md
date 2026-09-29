@@ -382,6 +382,63 @@ manage.py vidlock_progress courses.Lesson 42
 come from the viewer's browser, so each heartbeat may claim no more than
 could have played since the last one. Treat them as analytics, not proof.
 
+## Captions and search inside lessons
+
+```python
+VIDLOCK = {
+    ...,
+    'TRANSCRIBER': 'vidlock.transcribe.FasterWhisper',   # pip install "django-vidlock[transcribe]"
+    'TRANSCRIBE_MODEL': 'small',      # tiny, base, small, medium, large-v3
+    'TRANSCRIBE_LANGUAGE': 'ar',      # or None to detect it
+}
+```
+
+Every video sealed from then on is also transcribed with Whisper, on your
+own worker. Its audio never leaves your machine, and there is no per-minute
+fee. Transcription happens after the video is live, and a failure never fails
+the seal. `manage.py vidlock_transcribe` does the videos sealed before.
+
+* **Captions.** The player adds a captions track by itself, served behind
+  the same token as the playlist.
+* **Search.** `transcribe.search('focal length', videos=student_lessons)`
+  returns `[{'video_id', 'start', 'text'}]`, and `player.seek(start)` jumps
+  there. Search folds Arabic spelling variants (hamza forms, ta marbuta,
+  diacritics), so «الاحتمالات» finds «الإحتمالات».
+
+For Arabic lessons use `small` or larger; `tiny` is for trying it out. Any
+class with `transcribe(audio_path, language) -> (language, [(start, end,
+text)])` can replace Whisper, a cloud speech API for example.
+
+## What the teacher should know
+
+```python
+class LessonBackend(SealedBackend):
+    def audience(self, video):     # who should watch it
+        return [e.user for e in video.course.enrolments.filter(active=True)]
+
+    def teachers(self, video):     # who gets the report
+        return [video.course.teacher]
+
+    def phone(self, user):         # for WhatsApp
+        return user.profile.phone
+```
+
+`insights.for_video(lesson)` and `manage.py vidlock_insights` report:
+
+* who has not started;
+* who stopped and has not come back for a week;
+* where most of those who stop, stop;
+* which part everyone replays, which is worth explaining again.
+
+Run it daily with `--send` (to the teachers) and `--nudge` (reminds students
+who have not started), through `VIDLOCK['NOTIFIER']`:
+
+| Notifier | Settings |
+|---|---|
+| `vidlock.notify.email` | Django's email settings |
+| `vidlock.notify.whatsapp` | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, and `WHATSAPP_TEMPLATE` for messages outside a 24-hour conversation (WhatsApp Cloud API) |
+| `vidlock.notify.webhook` | `NOTIFY_WEBHOOK_URL`: Slack, Discord, a Telegram bot, n8n, Zapier… |
+
 ## One screen at a time
 
 ```python
@@ -522,6 +579,8 @@ manage.py vidlock_seal --queue                # hand them to VIDLOCK['ENQUEUE_SE
 manage.py vidlock_rewrap                      # re-encrypt keys under the first KEY_ENCRYPTION_KEYS
 manage.py vidlock_export courses.Lesson 42 lesson-42.mp4   # decrypt back to a playable MP4
 manage.py vidlock_trace K7QMZ4                # which account a watermark code belongs to
+manage.py vidlock_transcribe                  # captions and search for videos sealed before
+manage.py vidlock_insights --send --nudge     # daily: report to teachers, remind students
 manage.py vidlock_risk amira --clear          # a viewer's risk score; lift a pause
 ```
 
@@ -592,6 +651,10 @@ recover any video later with `vidlock_export`.
 | `MAX_NETWORKS_PER_DAY` | `6` | Networks (/24, /48) a viewer may use in a day before each new one adds to the score. |
 | `WATERMARK_CODE` | `True` | Add the traceable code (and time) to the watermark. |
 | `TRACK_PROGRESS` | `True` | Record watch progress from the heartbeat (`vidlock.progress`). |
+| `TRANSCRIBER` / `TRANSCRIBE_MODEL` / `TRANSCRIBE_LANGUAGE` | `None` / `'small'` / `None` | Transcribe sealed videos for captions and search. |
+| `NOTIFIER` | `None` | `'vidlock.notify.email'`, `'.whatsapp'` or `'.webhook'` for insights and reminders. |
+| `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE`, `WHATSAPP_TEMPLATE_LANGUAGE` | | WhatsApp Cloud API. |
+| `NOTIFY_WEBHOOK_URL` | | Where `vidlock.notify.webhook` posts. |
 | `ON_KEY_ABUSE` | — | Dotted path to `fn(request, user, video)`, called once a day per viewer past a limit. |
 | `KEY_ENCRYPTION_KEYS` | from `SECRET_KEY` | Secrets that encrypt the stored video keys; the first one encrypts. |
 | `ENQUEUE_SEAL` | — | Dotted path to `fn(model, pk, video_key)` that queues sealing; used by the admin and `vidlock_seal --queue`. |
@@ -608,6 +671,11 @@ player follows `<html lang>`. Corrections and new languages are welcome:
 they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 ## Upgrading
+
+**From 0.5 to 0.6**
+
+* Run `manage.py migrate`, which adds the `Transcript` table.
+* Everything new is off until you set `TRANSCRIBER` or `NOTIFIER`.
 
 **From 0.4 to 0.5**
 
@@ -728,6 +796,12 @@ MIT © Nader Yasser. The bundled hls.js is © Dailymotion, Apache-2.0 (see
 - **أدوات تشغيل:** أوامر `vidlock_seal` و`vidlock_status` و`vidlock_rewrap`
   و`vidlock_export` و`vidlock_trace` و`vidlock_risk`، وإجراء «تشفير مرة أخرى» في لوحة الأدمن، وفحوصات
   `manage.py check`.
+- **تفريغ نصي وترجمة وبحث جوه الحصص:** بـWhisper على السيرفر بتاعك، من غير
+  رسوم بالدقيقة. الطالب يكتب كلمة ويروح للثانية اللي اتقالت فيها، والبحث
+  بيفهم اختلافات الكتابة العربية (الهمزات والتاء المربوطة والتشكيل).
+- **تقارير وتنبيهات للمدرس على الإيميل أو واتساب:** مين ما بدأش الحصة، ومين
+  وقف ومارجعش، والطلبة بيقفوا فين، وأنهي جزء بيتعاد كتير. وكمان تذكير
+  أوتوماتيك للطلبة اللي ما بدأوش.
 - **متابعة المشاهدة:** مين اتفرج فعلًا، ووقف فين، وأنهي جزء الطلبة بيعيدوه
   كتير، من غير أي كود زيادة. `manage.py vidlock_progress` بيطلّع التقرير.
 - **رسائل بالعربي** في السيرفر والأدمن والمشغّل، ومعاها الإنجليزي والفرنساوي

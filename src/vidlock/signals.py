@@ -16,6 +16,9 @@ score (``vidlock.risk``) reaches ``RISK_THRESHOLD``. Keyword arguments:
 ``user``, ``score``, ``events`` (event name -> count), ``suspended_for``
 (seconds; 0 when only flagged) and ``request``.
 
+``transcript_ready`` — a video's transcript was stored. ``sender`` is your
+model class; keyword arguments: ``video``, ``transcript``.
+
 ``monitored`` — in monitor mode (``ENFORCE = False``), sent each time a
 protective rule would have refused a request. Keyword arguments: ``rule``
 (see ``vidlock.monitor.RULES``), ``request``, ``user``, ``video``.
@@ -34,3 +37,4 @@ seal_finished = Signal()
 key_abuse = Signal()
 viewer_flagged = Signal()
 monitored = Signal()
+transcript_ready = Signal()

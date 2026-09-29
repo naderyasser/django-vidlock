@@ -528,6 +528,20 @@
     function onSeeking() { closeRun(); }
     function onPageHide() { onStop(); }
 
+    // Captions from the lesson's transcript, when it has one. One <track>,
+    // kept across renewals (its URL carries the first token; the browser
+    // fetches it once).
+    let captions = null;
+    function showCaptions(data) {
+      if (!data.captions_url || captions || options.captions === false) return;
+      captions = document.createElement('track');
+      captions.kind = 'subtitles';
+      captions.src = data.captions_url;
+      captions.srclang = data.captions_language || 'und';
+      captions.label = options.captionsLabel || data.captions_language || 'Captions';
+      video.appendChild(captions);
+    }
+
     function showWatermark(data) {
       if (options.watermark === false) return;
       const custom = typeof options.watermark === 'object' && options.watermark ? options.watermark : {};
@@ -648,6 +662,7 @@
         const wasPlaying = opts.playing != null ? opts.playing : (resume && !video.paused);
         if (!(await attachSource(data, position, wasPlaying))) return;
         showWatermark(data);
+        showCaptions(data);
         startHeartbeat(data);
         onStatus(null);
         if (data.expires_in) scheduleRenewal(data.expires_in);
@@ -690,6 +705,12 @@
     load();
     return {
       // Also takes the stream back after it moved to another device.
+      // Jump to a moment (a search result, a chapter) and play.
+      seek: function (seconds) {
+        const go = function () { video.currentTime = seconds; video.play().catch(function () {}); };
+        if (video.readyState >= 1) go();
+        else video.addEventListener('loadedmetadata', function once() { video.removeEventListener('loadedmetadata', once); go(); });
+      },
       reload: function () {
         stopped = false;
         return load({ resume: true, takeover: true, at: video.currentTime, playing: true });
@@ -711,6 +732,7 @@
         dropHls();
         dropNative();
         if (watermark) watermark.remove();
+        if (captions) captions.remove();
       },
     };
   }

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: django-vidlock\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-25 00:00+0000\n"
+"POT-Creation-Date: 2026-09-29 00:00+0000\n"
 "PO-Revision-Date: 2026-09-25 00:00+0000\n"
 "Last-Translator: django-vidlock contributors\n"
 "Language-Team: fr\n"
@@ -48,8 +48,51 @@ msgstr[1] "%d vidéos envoyées pour scellement."
 msgid "Nothing to seal among the selected videos."
 msgstr "Rien à sceller parmi les vidéos sélectionnées."
 
+msgid "Watched"
+msgstr "Regardé"
+
+msgid "Minutes"
+msgstr "Minutes"
+
 msgid "VidLock"
 msgstr "VidLock"
+
+#, python-format
+msgid ""
+"  %(finished)s of %(audience)s finished, %(started)s started, %(waiting)s "
+"not yet"
+msgstr ""
+"  %(finished)s sur %(audience)s ont fini, %(started)s ont commencé, "
+"%(waiting)s pas encore"
+
+#, python-format
+msgid "  %(finished)s finished of %(started)s who started"
+msgstr "  %(finished)s ont fini sur %(started)s qui ont commencé"
+
+#, python-format
+msgid "  %(count)s stopped and have not come back for %(days)s days"
+msgstr ""
+"  %(count)s se sont arrêtés et ne sont pas revenus depuis %(days)s jours"
+
+#, python-format
+msgid "  most who stop, stop around %(at)s"
+msgstr "  la plupart de ceux qui s’arrêtent le font vers %(at)s"
+
+#, python-format
+msgid ""
+"  %(at)s is replayed %(ratio)sx more than the rest: worth explaining again?"
+msgstr "  %(at)s est revu %(ratio)sx plus que le reste : à réexpliquer ?"
+
+#, python-format
+msgid "Lesson report: %s"
+msgstr "Rapport de la leçon : %s"
+
+msgid "A lesson is waiting for you"
+msgstr "Une leçon vous attend"
+
+#, python-format
+msgid "You have not started \"%s\" yet."
+msgstr "Vous n’avez pas encore commencé « %s »."
 
 msgid "This link has expired. Reload the page."
 msgstr "Ce lien a expiré. Rechargez la page."

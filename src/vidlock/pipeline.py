@@ -23,7 +23,7 @@ import uuid
 
 from django.db import transaction
 
-from vidlock import conf, keys, packager, signals
+from vidlock import conf, keys, packager, signals, transcribe
 from vidlock.playlist import segment_count
 from vidlock.storage import default_storage
 
@@ -96,6 +96,7 @@ def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = 
         return _mark(model, pk, source_key, model.STATE_SKIPPED, 'ffmpeg is not installed')
 
     target = sealed_key_for(source_key)
+    audio = None
     try:
         with tempfile.TemporaryDirectory(prefix='vidlock-') as work:
             source = os.path.join(work, 'source' + os.path.splitext(source_key)[1].lower())
@@ -107,6 +108,16 @@ def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = 
                 logger.info('%s %s not sealed: %s', model.__name__, pk, found.problem)
                 return _mark(model, pk, source_key, model.STATE_SKIPPED, found.problem)
             ts_path, playlist, key = packager.package(source, work)
+            if conf.get('TRANSCRIBER'):
+                # The clear source is only here; keep its audio for after the swap.
+                fd, audio = tempfile.mkstemp(prefix='vidlock-audio-', suffix='.wav')
+                os.close(fd)
+                try:
+                    transcribe.extract_audio(source, audio)
+                except Exception:
+                    logger.exception('audio for transcribing %s %s', model.__name__, pk)
+                    os.remove(audio)
+                    audio = None
             size = os.path.getsize(ts_path)
             # A storage may save under another name (Django storages avoid
             # overwrites); the name it returns is the one that exists.
@@ -114,6 +125,8 @@ def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = 
     except Exception as exc:
         logger.exception('sealing %s %s failed', model.__name__, pk)
         storage.delete(target)
+        if audio and os.path.exists(audio):
+            os.remove(audio)
         return _mark(model, pk, source_key, model.STATE_FAILED, f'{type(exc).__name__}: {exc}')
 
     try:
@@ -133,13 +146,21 @@ def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = 
     except Exception:
         # An object no row names is billed for ever and shows on no meter.
         storage.delete(target)
+        if audio and os.path.exists(audio):
+            os.remove(audio)
         raise
     if current != [source_key]:
         storage.delete(target)
+        if audio and os.path.exists(audio):
+            os.remove(audio)
         return _finished(model, pk, 'stale', video_key=(current or [''])[0])
     # Only after the row points at the .ts: a viewer halfway through the MP4
     # gets an error, and a player that retries receives the sealed stream.
     if delete_source:
         storage.delete(source_key)
     logger.info('%s %s sealed (%s bytes, %s segments)', model.__name__, pk, size, segment_count(playlist))
-    return _finished(model, pk, model.STATE_SEALED, video_key=target)
+    state = _finished(model, pk, model.STATE_SEALED, video_key=target)
+    if audio:
+        # After the video is live: transcribing takes a while and never fails the seal.
+        transcribe.after_seal(model, pk, audio)
+    return state

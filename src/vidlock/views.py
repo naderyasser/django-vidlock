@@ -31,7 +31,21 @@ from django.utils.translation import gettext_lazy
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from vidlock import conf, guard, keys, monitor, progress, risk, signals, streams, tokens, trace, wrap
+from vidlock import (
+    conf,
+    guard,
+    keys,
+    monitor,
+    progress,
+    risk,
+    signals,
+    streams,
+    tokens,
+    trace,
+    transcribe,
+    wrap,
+)
+from vidlock.models import Transcript
 from vidlock.playlist import CONTENT_TYPE, duration, render, with_token
 from vidlock.storage import MAX_SIGNED_TTL, default_storage
 
@@ -96,6 +110,12 @@ def playback_info(request, video, storage=None, channel=None) -> dict:
     def url(name):
         return with_token(request.build_absolute_uri(reverse(name, args=[video.pk])), token)
 
+    captions = Transcript.objects.filter(video_type=video._meta.label, video_id=str(video.pk)).values_list(
+        'language', flat=True
+    )
+    if captions:
+        extra['captions_url'] = url('vidlock:captions')
+        extra['captions_language'] = captions[0] or 'und'
     return {
         'format': 'hls',
         'url': url('vidlock:playlist'),
@@ -195,6 +215,22 @@ def playlist_view(request, video_id):
         key_url=with_token(request.build_absolute_uri(reverse('vidlock:key', args=[video.pk])), token),
     )
     return _private(HttpResponse(body, content_type=CONTENT_TYPE))
+
+
+@require_GET
+def captions_view(request, video_id):
+    """The lesson's transcript as WebVTT, for the player's captions track.
+    Same token as the playlist; the transcript is part of the lesson."""
+    backend = _backend()
+    viewer, refusal = _viewer(request, video_id, backend, require_session=False)
+    if refusal:
+        return refusal
+    found = Transcript.objects.filter(
+        video_type=viewer.video._meta.label, video_id=str(viewer.video.pk)
+    ).first()
+    if found is None:
+        raise Http404
+    return _private(HttpResponse(transcribe.webvtt(found), content_type='text/vtt; charset=utf-8'))
 
 
 @require_GET
