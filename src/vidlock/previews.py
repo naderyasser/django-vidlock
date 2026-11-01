@@ -216,16 +216,41 @@ def current(video):
 
 
 def forget(video, storage=None) -> None:
-    """Remove a video's previews from storage and the database. Call it when
-    you delete a video, as you delete its .ts."""
-    from vidlock.models import Preview
-    from vidlock.storage import default_storage
+    """Remove a video's previews from the database, and from storage once the
+    transaction commits (a rolled-back delete keeps its images). Called for
+    you when a model using SealedVideoMixin is deleted; call it yourself when
+    you drop a video's file without deleting its row."""
+    from django.db import transaction
 
-    storage = storage or default_storage()
-    for found in Preview.objects.filter(video_type=video._meta.label, video_id=str(video.pk)):
-        for key in found.keys:
-            storage.delete(key)
-        found.delete()
+    from vidlock.models import Preview
+
+    rows = Preview.objects.filter(video_type=video._meta.label, video_id=str(video.pk))
+    keys = [key for found in rows for key in found.keys]
+    if not keys and not rows.exists():
+        return
+    rows.delete()
+
+    def remove():
+        try:
+            target = storage
+            if target is None:
+                from vidlock.storage import default_storage
+
+                target = default_storage()
+            for key in keys:
+                target.delete(key)
+        except Exception:
+            logger.exception('vidlock: could not remove the previews of %s %s', video._meta.label, video.pk)
+
+    transaction.on_commit(remove)
+
+
+def on_delete(sender, instance, **kwargs) -> None:
+    """``post_delete`` receiver: a deleted video takes its previews with it."""
+    from vidlock.models import SealedVideoMixin
+
+    if isinstance(instance, SealedVideoMixin):
+        forget(instance)
 
 
 def _stamp(seconds: float) -> str:

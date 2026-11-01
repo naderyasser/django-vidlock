@@ -612,8 +612,10 @@ a token, to anyone, for sealed videos your backend allows
 page with `previews.public_url(request, lesson)` (or `kind='thumbnail'`).
 The sprites and their track stay behind the viewer's token either way.
 
-When you delete a video, delete its previews as you delete its file:
-`vidlock.previews.forget(lesson)`.
+Deleting a video deletes its previews: a `post_delete` receiver removes the
+rows, and the images from storage once the transaction commits (a rolled-back
+delete keeps them). If you drop a video's file but keep its row, call
+`vidlock.previews.forget(lesson)` yourself.
 
 ## What the teacher should know
 

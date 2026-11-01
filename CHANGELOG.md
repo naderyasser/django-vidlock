@@ -50,7 +50,9 @@
 * `POSTER_PUBLIC = True` serves the poster and thumbnail without a token
   for course pages, subject to `SealedBackend.poster_visible()`;
   `previews.public_url()`. Sprites stay private.
-* `previews.forget(video)` when you delete a video.
+* Deleting a video deletes its previews: a `post_delete` receiver removes
+  the rows, and the images from storage once the transaction commits.
+  `previews.forget(video)` stays public for a file dropped without its row.
 
 ### Fixes
 

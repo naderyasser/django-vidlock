@@ -128,10 +128,64 @@ def test_previews_of_an_older_file_are_not_served(sealed):
     assert previews.current(sealed) is None
 
 
-def test_forget_removes_them(sealed):
+def test_forget_removes_them(sealed, django_capture_on_commit_callbacks):
     keys = previews.current(sealed).keys
-    previews.forget(sealed)
+    with django_capture_on_commit_callbacks(execute=True):
+        previews.forget(sealed)
     assert not Preview.objects.exists() and set(keys) <= set(storage.DELETED)
+
+
+def test_deleting_a_video_deletes_its_previews(sealed, django_capture_on_commit_callbacks):
+    keys = previews.current(sealed).keys
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        sealed.delete()
+        assert not set(keys) & set(storage.DELETED), 'storage waits for the commit'
+    assert len(callbacks) == 1
+    assert not Preview.objects.exists() and set(keys) <= set(storage.DELETED)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_rolled_back_delete_keeps_the_images(on, sample, student):
+    from django.db import transaction
+
+    storage.OBJECTS[SOURCE] = sample
+    lesson = Lesson.objects.create(title='x', video_key=SOURCE)
+    assert seal(Lesson, lesson.pk, SOURCE) == 'sealed'
+    lesson.refresh_from_db()
+    keys = previews.current(lesson).keys
+    with pytest.raises(RuntimeError), transaction.atomic():
+        lesson.delete()
+        raise RuntimeError('changed my mind')
+    assert Preview.objects.count() == 1 and not set(keys) & set(storage.DELETED)
+    assert all(key in storage.OBJECTS for key in keys)
+
+
+def test_deleting_other_models_touches_nothing(sealed, django_capture_on_commit_callbacks):
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        get_user_model().objects.create_user('someone').delete()
+    assert callbacks == [] and Preview.objects.count() == 1
+
+
+def test_a_video_without_previews_costs_no_storage(settings, django_capture_on_commit_callbacks):
+    lesson = Lesson.objects.create(title='x', video_key='v/a.mp4')
+    with (
+        # The patch must outlive the callbacks, which run as the capture exits.
+        mock.patch('vidlock.storage.default_storage', side_effect=AssertionError('no storage')),
+        django_capture_on_commit_callbacks(execute=True) as callbacks,
+    ):
+        lesson.delete()
+    assert callbacks == []
+
+
+def test_a_storage_failure_never_breaks_the_delete(sealed, django_capture_on_commit_callbacks, caplog):
+    with (
+        # The patch must outlive the callbacks, which run as the capture exits.
+        mock.patch('vidlock.storage.default_storage', side_effect=RuntimeError('bucket down')),
+        django_capture_on_commit_callbacks(execute=True),
+    ):
+        sealed.delete()
+    assert not Lesson.objects.filter(pk=sealed.pk).exists()
+    assert 'could not remove the previews' in caplog.text
 
 
 # -- serving -------------------------------------------------------------------------

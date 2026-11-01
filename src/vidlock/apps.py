@@ -7,4 +7,12 @@ class VidlockConfig(AppConfig):
     verbose_name = _('VidLock')
 
     def ready(self):
-        from vidlock import checks  # noqa: F401 — registers the system checks
+        from django.db.models.signals import post_delete
+
+        from vidlock import (
+            checks,  # noqa: F401 — registers the system checks
+            previews,
+        )
+
+        # Deleting a video deletes its previews (vidlock.previews.forget).
+        post_delete.connect(previews.on_delete, dispatch_uid='vidlock.previews.on_delete')
