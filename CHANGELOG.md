@@ -31,6 +31,13 @@
 
 ### Fixes
 
+* HDR uploads are tone-mapped again with ffmpeg 8. Its `-filters` listing
+  prints a two-character flag column (`.S zscale V->V`); vidlock only read
+  three to six, so it never saw `zscale`, skipped tone-mapping, and wrote
+  8-bit H.264 still tagged HLG/PQ BT.2020 (`EncodeResult.tonemapped` False,
+  and `vidlock_doctor` wrongly said zscale was missing). Both the
+  three-column (ffmpeg 7 and earlier) and two-column (ffmpeg 8) listings
+  parse now, and legend rows are no longer read as names.
 * Videos that are not models work again. Since 0.4 the heartbeat (with
   `TRACK_PROGRESS`, the default), since 0.6 the captions view, and since
   0.8 every `playback_info` call and the poster, thumbnail and seek-preview

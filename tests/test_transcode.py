@@ -467,3 +467,63 @@ def test_doctor_reports_the_encoder(on, capsys):
     call_command('vidlock_doctor', '--offline')
     line = next(line for line in capsys.readouterr().out.splitlines() if ' transcode ' in line)
     assert 'libx264 (libx264 chosen; 2 s clip in' in line, line
+
+
+# -- what this ffmpeg has ------------------------------------------------------------
+
+FILTERS_FFMPEG6 = """Filters:
+  T.. = Timeline support
+  .S. = Slice threading
+  ..C = Command support
+  A = Audio input/output
+  V = Video input/output
+  N = Dynamic number and/or type of input/output
+  | = Source or sink filter
+ ... abench            A->A       Benchmark part of a filtergraph.
+ TSC scale             V->V       Scale the input video size and/or convert the image format.
+ .S. zscale            V->V       Apply resizing, colorspace and bit depth conversion.
+ ... buffer            |->V       Buffer video frames, and make them accessible to the filterchain.
+"""
+
+# BtbN n8.1.3: the legend still shows three columns, the rows have two.
+FILTERS_FFMPEG8 = """Filters:
+  T.. = Timeline support
+  .S. = Slice threading
+  A = Audio input/output
+  V = Video input/output
+  N = Dynamic number and/or type of input/output
+  | = Source or sink filter
+ TS aap               AA->A      Apply Affine Projection algorithm to first audio stream.
+ .. abench            A->A       Benchmark part of a filtergraph.
+ TS scale             V->V       Scale the input video size and/or convert the image format.
+ .S zscale            V->V       Apply resizing, colorspace and bit depth conversion.
+ .. buffer            |->V       Buffer video frames, and make them accessible to the filterchain.
+"""
+
+ENCODERS = """Encoders:
+ V..... = Video
+ A..... = Audio
+ ------
+ V....D libx264              libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10 (codec h264)
+ V....D h264_nvenc           NVIDIA NVENC H.264 encoder (codec h264)
+ A....D aac                  AAC (Advanced Audio Coding)
+"""
+
+
+@pytest.mark.parametrize('listing', [FILTERS_FFMPEG6, FILTERS_FFMPEG8], ids=['ffmpeg6', 'ffmpeg8'])
+def test_filters_are_found_in_every_ffmpegs_listing(listing):
+    transcode._filters.clear()
+    try:
+        with mock.patch('vidlock.transcode.subprocess.run') as run:
+            run.return_value = subprocess.CompletedProcess([], 0, listing, '')
+            assert transcode.has_filter('zscale', 'ffmpeg-under-test')
+            assert transcode.has_filter('scale', 'ffmpeg-under-test')
+            assert not transcode.has_filter('tonemap_opencl', 'ffmpeg-under-test')
+            assert not transcode.has_filter('=', 'ffmpeg-under-test'), 'legend rows are not filters'
+        assert run.call_count == 1, 'listed once, then cached'
+    finally:
+        transcode._filters.clear()
+
+
+def test_encoders_listing():
+    assert transcode._names(ENCODERS) == {'libx264', 'h264_nvenc', 'aac'}
