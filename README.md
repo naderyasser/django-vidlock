@@ -371,6 +371,11 @@ manage.py vidlock_trace K7QMZ4               # searches the last 60 days
 manage.py vidlock_trace K7QMZ4 --day 2026-09-25
 ```
 
+It also finds codes drawn by the first 0.3.0 build, which used SHA-1 before
+the algorithm was pinned to SHA-256. Recordings made before such an upgrade
+keep tracing, and the match is marked `legacy SHA-1 code`.
+`--no-legacy` searches current codes only.
+
 ## Who watched what
 
 The player reports the stretches of video it actually played, and vidlock
