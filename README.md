@@ -575,6 +575,45 @@ def enqueue_transcode(model, pk, key):
 # Q_CLUSTER = {'name': 'transcode', 'workers': 1, 'timeout': 15000, 'retry': 16000, ...}
 ```
 
+### Calling it from your own pipeline
+
+Projects that seal with `vidlock.packager` from their own tasks (instead
+of `pipeline.seal`) get the same re-encode as one function. It takes a local
+file and writes a local MP4, with no model, task or storage involved:
+
+```python
+from vidlock import packager
+from vidlock.transcode import TranscodeError, TranscodeTimeout, encode
+
+found = packager.probe(local_upload)
+if found.problem:                      # HEVC, 10-bit, VP9, Opus…: not sealable as it is
+    result = encode(local_upload, local_mp4, on_progress=report, timeout=2 * 3600)
+    local_upload = result.output
+ts_path, playlist, keys = packager.package(local_upload, workdir)
+```
+
+* **What it does:** `encode()` returns an `EncodeResult`.
+  * `action` is `'copied'` (only the container changed), `'audio'`
+    (picture kept, sound re-encoded to AAC) or `'reencoded'`.
+  * `encoder` is `'copy'`, `'libx264'` or the hardware encoder used.
+    `fell_back` means a hardware encoder failed and libx264 did the work.
+  * `tonemapped` says whether HDR was tone-mapped. `seconds` is the time
+    taken.
+  * `source` and `result` are `packager.Probe`s of what went in and what
+    came out.
+* **How it encodes:** exactly as the pipeline does, with the same encoder
+  detection, HDR tone-mapping, scaling (never upscaled) and a keyframe
+  every `SEGMENT_SECONDS`.
+* **Options:** the keywords `height`, `crf`, `preset`, `encoder`,
+  `audio_bitrate`, `keyframe_seconds` and `timeout` override the
+  `TRANSCODE_*` settings for this call. Nothing else is read, and the
+  `TRANSCODE` switch itself is not needed.
+* **Errors:** `TranscodeError` means ffmpeg is missing, there is no
+  picture, ffmpeg failed, or the result still can't be sealed.
+  `TranscodeTimeout` means the encode ran past `timeout`. The output file
+  may then be partial, so delete it.
+* **Stability:** this is a stable API from 0.8.1 on.
+
 ### Videos already marked `skipped`
 
 ```bash
