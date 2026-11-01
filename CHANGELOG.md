@@ -2,6 +2,18 @@
 
 ## 0.9.0 — unreleased
 
+### For projects that call the packager themselves
+
+* `vidlock.transcode.encode(source, output, …)` (stable API): a local file
+  in, an H.264/AAC MP4 ready for `packager.package` out, with no model,
+  task or storage involved. It copies, re-encodes only the sound, or
+  re-encodes, with the pipeline's encoder detection, HDR tone-mapping,
+  scaling and keyframe rules. Returns an `EncodeResult` (action, encoder,
+  fallback, tone-mapping, time, probes in and out), reports progress and
+  takes a timeout (`TranscodeTimeout`). Keywords override the
+  `TRANSCODE_*` settings; `EncodeOptions.from_settings()` shows the
+  defaults. The pipeline now runs through it.
+
 ### Edge delivery in front of R2
 
 * `DELIVERY = 'edge'` (off by default; `'direct'` is unchanged): the media
