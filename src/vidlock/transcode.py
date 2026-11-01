@@ -40,6 +40,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from dataclasses import dataclass
 
 from django.utils import timezone
 
@@ -61,6 +62,66 @@ PROGRESS_EVERY = 2.0
 
 class TranscodeError(RuntimeError):
     pass
+
+
+class TranscodeTimeout(TranscodeError):
+    """The encode ran past its timeout and was killed."""
+
+
+@dataclass(frozen=True)
+class EncodeOptions:
+    """How ``encode`` works; every field defaults to the ``VIDLOCK`` setting
+    named after it (``from_settings``)."""
+
+    height: int = 720  # TRANSCODE_HEIGHT: the shorter side, never upscaled
+    crf: int = 23  # TRANSCODE_CRF
+    preset: str = 'veryfast'  # TRANSCODE_PRESET (libx264)
+    audio_bitrate: str = '128k'  # TRANSCODE_AUDIO_BITRATE
+    keyframe_seconds: float = 10  # SEGMENT_SECONDS: one keyframe each, so ranges stay even
+    timeout: float = 4 * 3600  # TRANSCODE_TIMEOUT
+    encoder: str = 'auto'  # TRANSCODE_ENCODER
+
+    @classmethod
+    def from_settings(cls, **overrides) -> EncodeOptions:
+        values = {
+            'height': conf.get('TRANSCODE_HEIGHT'),
+            'crf': conf.get('TRANSCODE_CRF'),
+            'preset': conf.get('TRANSCODE_PRESET'),
+            'audio_bitrate': conf.get('TRANSCODE_AUDIO_BITRATE'),
+            'keyframe_seconds': conf.get('SEGMENT_SECONDS'),
+            'timeout': conf.get('TRANSCODE_TIMEOUT'),
+            'encoder': conf.get('TRANSCODE_ENCODER') or 'auto',
+        }
+        values.update({k: v for k, v in overrides.items() if v is not None})
+        return cls(**values)
+
+
+@dataclass(frozen=True)
+class EncodeResult:
+    """What ``encode`` did."""
+
+    #: The MP4 written, ready for ``packager.package``.
+    output: str
+    #: ``'copied'``: picture and sound kept, only the container or metadata
+    #: changed; ``'audio'``: picture kept, sound re-encoded to AAC;
+    #: ``'reencoded'``: the picture was re-encoded (and the sound if needed).
+    action: str
+    #: ``'copy'`` when the picture was kept, else the encoder that did it:
+    #: ``'libx264'``, ``'h264_nvenc'``, ``'h264_qsv'`` or ``'h264_vaapi'``.
+    encoder: str
+    #: A hardware encoder failed and libx264 did the work instead.
+    fell_back: bool
+    #: HDR (PQ/HLG) was tone-mapped to SDR.
+    tonemapped: bool
+    #: Wall-clock time of the encode.
+    seconds: float
+    #: What went in, and what came out (``packager.Probe``).
+    source: packager.Probe
+    result: packager.Probe
+
+    @property
+    def reencoded(self) -> bool:
+        return self.action == 'reencoded'
 
 
 def enabled() -> bool:
@@ -173,14 +234,20 @@ def forget_detection() -> None:
         _working.clear()
 
 
-def encoder() -> str:
-    choice = conf.get('TRANSCODE_ENCODER') or 'auto'
+def encoder(choice: str | None = None) -> str:
+    """The encoder to use: ``choice`` (default TRANSCODE_ENCODER), with
+    ``'auto'`` resolved by ``detect()``."""
+    choice = choice or conf.get('TRANSCODE_ENCODER') or 'auto'
     if choice == 'auto':
         return detect()
     if choice not in ENCODERS:
         names = ', '.join(ENCODERS)
         raise TranscodeError(f"VIDLOCK['TRANSCODE_ENCODER'] = {choice!r} is not one of auto, {names}")
     return choice
+
+
+#: ``encode()`` takes an ``encoder`` keyword, which hides the function above.
+_resolve_encoder = encoder
 
 
 # -- the ffmpeg command -------------------------------------------------------
@@ -199,10 +266,13 @@ def scale_filter(height: int) -> str:
     return f"scale=w='trunc(iw*{factor}/2)*2':h='trunc(ih*{factor}/2)*2'"
 
 
-def command(binary: str, source: str, out: str, found: packager.Probe, name: str) -> list[str]:
+def command(
+    binary: str, source: str, out: str, found: packager.Probe, name: str, options: EncodeOptions | None = None
+) -> list[str]:
     """The ffmpeg command that turns ``source`` into a sealable MP4 at ``out``."""
-    crf = str(conf.get('TRANSCODE_CRF'))
-    segment = conf.get('SEGMENT_SECONDS')
+    options = options or EncodeOptions.from_settings()
+    crf = str(options.crf)
+    segment = f'{float(options.keyframe_seconds):g}'
     args = [binary, '-hide_banner', '-loglevel', 'error', '-nostdin', '-y']
     copy_video = found.video_ok
     if not copy_video and name == 'h264_vaapi':
@@ -214,7 +284,7 @@ def command(binary: str, source: str, out: str, found: packager.Probe, name: str
     else:
         # Scale first: tone-mapping works in 32-bit float per pixel, and at
         # 720p it has 2.25x fewer of them than at 1080p (1.6x faster overall).
-        chain = [scale_filter(conf.get('TRANSCODE_HEIGHT'))]
+        chain = [scale_filter(options.height)]
         if found.hdr and has_filter('zscale', binary):
             chain.append(TONEMAP)
         if name == 'h264_vaapi':
@@ -225,7 +295,7 @@ def command(binary: str, source: str, out: str, found: packager.Probe, name: str
             chain.append('format=yuv420p')
         args += ['-vf', ','.join(chain)]
         if name == SOFTWARE:
-            args += ['-c:v', SOFTWARE, '-preset', str(conf.get('TRANSCODE_PRESET')), '-crf', crf]
+            args += ['-c:v', SOFTWARE, '-preset', str(options.preset), '-crf', crf]
             args += ['-profile:v', 'high', '-pix_fmt', 'yuv420p']
         elif name == 'h264_nvenc':
             args += ['-c:v', name, '-preset', 'p4', '-rc', 'vbr', '-cq', crf, '-b:v', '0']
@@ -238,7 +308,7 @@ def command(binary: str, source: str, out: str, found: packager.Probe, name: str
     if found.audio == 'aac':
         args += ['-c:a', 'copy']
     elif found.audio:
-        args += ['-c:a', 'aac', '-b:a', str(conf.get('TRANSCODE_AUDIO_BITRATE')), '-ac', '2']
+        args += ['-c:a', 'aac', '-b:a', str(options.audio_bitrate), '-ac', '2']
     args += ['-movflags', '+faststart', '-f', 'mp4', '-progress', 'pipe:1', '-nostats', out]
     return args
 
@@ -247,9 +317,10 @@ def _lowest_priority():
     os.nice(19)
 
 
-def _run(args: list[str], total: float, on_progress) -> None:
-    """Run ffmpeg, reporting the share done; kill it past TRANSCODE_TIMEOUT."""
-    timeout = float(conf.get('TRANSCODE_TIMEOUT'))
+def _run(args: list[str], total: float, on_progress, timeout: float | None = None) -> None:
+    """Run ffmpeg, reporting the share done; kill it past ``timeout``
+    (default TRANSCODE_TIMEOUT)."""
+    timeout = float(conf.get('TRANSCODE_TIMEOUT') if timeout is None else timeout)
     deadline = time.monotonic() + timeout
     with tempfile.TemporaryFile(mode='w+') as errors:
         process = subprocess.Popen(
@@ -276,33 +347,124 @@ def _run(args: list[str], total: float, on_progress) -> None:
                 process.kill()
                 process.wait()
         if time.monotonic() >= deadline:
-            raise TranscodeError(f'the re-encode took longer than TRANSCODE_TIMEOUT ({int(timeout)} s)')
+            raise TranscodeTimeout(
+                f'the re-encode took longer than its timeout, TRANSCODE_TIMEOUT ({timeout:g} s)'
+            )
         if process.returncode:
             errors.seek(0)
             raise TranscodeError(f'ffmpeg exited {process.returncode}: {errors.read().strip()[-300:]}')
 
 
-def transcode_file(source: str, out: str, found: packager.Probe, on_progress=None) -> str:
-    """Re-encode ``source`` into a sealable MP4 at ``out``. Returns the encoder
-    that did it ('copy' when only the sound or the container changed)."""
+def encode(
+    source: str,
+    output: str,
+    *,
+    on_progress=None,
+    timeout: float | None = None,
+    height: int | None = None,
+    crf: int | None = None,
+    preset: str | None = None,
+    encoder: str | None = None,
+    audio_bitrate: str | None = None,
+    keyframe_seconds: float | None = None,
+    probe: packager.Probe | None = None,
+) -> EncodeResult:
+    """Turn the local file ``source`` into an H.264/AAC MP4 at ``output`` that
+    ``packager.package`` can seal. Public and stable since 0.8.1.
+
+    It does no more than it must: a source that is already sealable is
+    remuxed (``'copied'``), one whose only problem is its sound gets AAC and
+    keeps its picture (``'audio'``), anything else is re-encoded
+    (``'reencoded'``) the way the pipeline does it: H.264 High 8-bit 4:2:0,
+    the shorter side at most ``height`` and never upscaled, a keyframe every
+    ``keyframe_seconds``, HDR tone-mapped to SDR when ffmpeg has zscale,
+    metadata dropped, ``+faststart``. ``encoder`` is ``'auto'`` (the first
+    hardware encoder that really works here, else libx264), ``'libx264'``, or
+    a hardware encoder's name; a hardware encoder that fails is retried once
+    with libx264 (``fell_back``).
+
+    Every keyword defaults to the ``VIDLOCK`` setting of the same purpose
+    (``EncodeOptions.from_settings``); nothing else is read, and no model,
+    task or storage is involved. ``on_progress(share)`` gets 0.0 to 1.0 as
+    ffmpeg goes; ``timeout`` (seconds) kills ffmpeg past it
+    (``TranscodeTimeout``). Inputs are opened as MP4/MOV, or as Matroska for
+    ``.mkv``/``.webm``, from local disk only. Raises ``TranscodeError`` when
+    ffmpeg is missing, the source has no picture, ffmpeg fails, or the
+    result still cannot be sealed. ``probe`` skips probing ``source`` again.
+    """
     binary = packager.ffmpeg_binary()
     if not binary:
         raise TranscodeError('ffmpeg is not installed')
+    options = EncodeOptions.from_settings(
+        height=height,
+        crf=crf,
+        preset=preset,
+        encoder=encoder,
+        audio_bitrate=audio_bitrate,
+        keyframe_seconds=keyframe_seconds,
+        timeout=timeout,
+    )
+    found = probe if probe is not None else packager.probe(source)
+    if not isinstance(found, packager.Probe):
+        found = packager.Probe(*found)
+    if not can_fix(found):
+        raise TranscodeError(f'{os.path.basename(source)} has no picture to encode ({found.describe()})')
+    started = time.monotonic()
+    fell_back = False
     if found.video_ok:
-        _run(command(binary, source, out, found, SOFTWARE), found.duration, on_progress)
-        return 'copy'
-    name = encoder()
-    try:
-        _run(command(binary, source, out, found, name), found.duration, on_progress)
-        return name
-    except TranscodeError as exc:
-        if name == SOFTWARE or 'TRANSCODE_TIMEOUT' in str(exc):
+        name = 'copy'
+        action = 'copied' if found.audio in ('', 'aac') else 'audio'
+        _run(
+            command(binary, source, output, found, SOFTWARE, options),
+            found.duration,
+            on_progress,
+            options.timeout,
+        )
+    else:
+        action = 'reencoded'
+        name = _resolve_encoder(options.encoder)
+        try:
+            _run(
+                command(binary, source, output, found, name, options),
+                found.duration,
+                on_progress,
+                options.timeout,
+            )
+        except TranscodeTimeout:
             raise
-        logger.warning('vidlock: %s failed (%s); re-encoding with libx264 instead', name, exc)
-    if on_progress:
-        on_progress(0.0)
-    _run(command(binary, source, out, found, SOFTWARE), found.duration, on_progress)
-    return SOFTWARE
+        except TranscodeError as exc:
+            if name == SOFTWARE:
+                raise
+            logger.warning('vidlock: %s failed (%s); re-encoding with libx264 instead', name, exc)
+            if on_progress:
+                on_progress(0.0)
+            name, fell_back = SOFTWARE, True
+            _run(
+                command(binary, source, output, found, SOFTWARE, options),
+                found.duration,
+                on_progress,
+                options.timeout,
+            )
+    result = packager.probe(output)
+    if result.problem:
+        raise TranscodeError(f'the encoded file still cannot be sealed: {result.problem}')
+    return EncodeResult(
+        output=output,
+        action=action,
+        encoder=name,
+        fell_back=fell_back,
+        tonemapped=action == 'reencoded' and found.hdr and has_filter('zscale', binary),
+        seconds=round(time.monotonic() - started, 3),
+        source=found,
+        result=result,
+    )
+
+
+def transcode_file(source: str, out: str, found: packager.Probe, on_progress=None) -> str:
+    """Re-encode ``source`` into a sealable MP4 at ``out`` with the settings.
+    Returns the encoder that did it ('copy' when only the sound or the
+    container changed). The pipeline's entry point; see ``encode``."""
+    return encode(source, out, on_progress=on_progress, probe=found).encoder
 
 
 # -- the job -------------------------------------------------------------------
