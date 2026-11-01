@@ -347,7 +347,9 @@ def test_commands_per_encoder(settings):
 def test_hdr_is_tone_mapped_when_zscale_is_there():
     hdr = packager.Probe('hevc', 'aac', 'yuv420p10le', color_transfer='smpte2084')
     with mock.patch('vidlock.transcode.has_filter', return_value=True):
-        assert 'tonemap=tonemap=hable' in ' '.join(transcode.command('ffmpeg', 'a.mov', 'o', hdr, 'libx264'))
+        args = transcode.command('ffmpeg', 'a.mov', 'o', hdr, 'libx264')
+        chain = args[args.index('-vf') + 1]
+        assert chain.index('scale=') < chain.index('tonemap=tonemap=hable') < chain.index('format=yuv420p')
     with mock.patch('vidlock.transcode.has_filter', return_value=False):
         assert 'tonemap' not in ' '.join(transcode.command('ffmpeg', 'a.mov', 'o', hdr, 'libx264'))
 

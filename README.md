@@ -456,8 +456,8 @@ The seal job notices the upload needs a re-encode and hands it to
   exactly as it was; a newer upload during the encode wins.
 * **Quality and speed:** `TRANSCODE_CRF = 23`, `TRANSCODE_PRESET =
   'veryfast'` (libx264). On 4 vCPUs, 1080p 10-bit HEVC became 720p H.264 at
-  about 5× real time on a test pattern; real camera footage is slower. Plan
-  on minutes per lesson, not seconds.
+  about 5× real time on a test pattern, and HDR (tone-mapped) at about 2.4×;
+  real camera footage is slower. Plan on minutes per lesson, not seconds.
 * **Hardware encoders:** `TRANSCODE_ENCODER = 'auto'` test-encodes one frame
   with h264_nvenc, h264_qsv and h264_vaapi (being compiled into ffmpeg does
   not mean the GPU is there), remembers the answer per process and otherwise
