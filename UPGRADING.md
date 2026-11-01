@@ -42,7 +42,7 @@ grep -c "algorithm='sha256'" <that folder>/tokens.py
 |---|---|---|---|---|
 | 1 | Token fingerprints use SHA-256 | 0.3.0 (later build) | everyone on the early 0.3.0 | **Yes**: every token in flight (≤ `TOKEN_TTL`) |
 | 2 | Tokens sign a JSON list | 0.5 | everyone | **Only in a rolling deploy or a rollback** |
-| 3 | Watermark codes use SHA-256 | 0.3.0 (later build) | early 0.3.0 | No, but codes on recordings made before the upgrade stop tracing |
+| 3 | Watermark codes use SHA-256 | 0.3.0 (later build) | early 0.3.0 | No; 0.8.1's `vidlock_trace` still finds codes recorded before the upgrade (0.8.0's does not) |
 | 4 | Heartbeat checks the session, 1 request/s | 0.5 | custom players, app clients | No for the bundled player; maybe for a custom one |
 | 5 | Per-range IV, no `IV=` attribute | 0.5 | code that parses or rewrites playlists | No; old videos keep their IVs |
 | 6 | ffmpeg/ffprobe open inputs as MP4/MOV only | 0.5 | direct `packager` callers | No; affects new seals |
@@ -107,14 +107,14 @@ entry 1). After a rollback, the same applies in reverse.
 
 The six-letter code in the watermark is a `salted_hmac` of user and day.
 SHA-256 is now pinned, so **every viewer's code changes at the upgrade.**
-Recordings made **before** the upgrade show SHA-1 codes, which
-`manage.py vidlock_trace` in 0.8 no longer finds.
+Recordings made **before** the upgrade show SHA-1 codes.
 
-**What to do:**
-
-* Before upgrading, note which leaks you may still need to trace.
-* To trace an old code after upgrading, compute SHA-1 codes for the day of
-  the recording:
+* **0.8.1 and later:** `manage.py vidlock_trace` finds those too, under
+  `SECRET_KEY` and every `SECRET_KEY_FALLBACKS` entry, and marks the match
+  `[legacy SHA-1 code: …]`. Nothing to do; leaks recorded before the
+  upgrade keep tracing. `--no-legacy` searches current codes only.
+* **0.8.0:** its `vidlock_trace` does not find SHA-1 codes. Upgrade to
+  0.8.1, or compute them by hand for the day of the recording:
 
   ```python
   import base64, datetime
@@ -129,8 +129,9 @@ Recordings made **before** the upgrade show SHA-1 codes, which
   [pk for pk in get_user_model().objects.values_list('pk', flat=True) if legacy_code(pk, day) == 'K7QMZ4']
   ```
 
-  With django-tenants, run it inside the tenant's schema (`schema_context`).
-  A built-in legacy fallback for `vidlock_trace` is proposed as a follow-up.
+With django-tenants, trace inside the tenant's schema (`tenant_command
+vidlock_trace … --schema=<schema>`, or `schema_context` around the snippet):
+user ids repeat across schemas.
 
 ---
 
@@ -142,6 +143,15 @@ the placeholders `__VIDLOCK_MEDIA__` and `__VIDLOCK_KEY__` / `__VIDLOCK_KEY__:n`
 `keys` is still one 16-byte key per rotation period, concatenated, and
 `vidlock.keys.wrap/unwrap` are unchanged. A sealed video from 0.3 and one
 from 0.8 are stored the same way.
+
+**New in 0.8.1: `vidlock.transcode.encode()`.** Before 0.8.1, a source the
+packager cannot take (HEVC from an iPhone, 10-bit, VP9, Opus sound) had no
+supported way in, and projects tended to serve the clear file instead.
+`encode(source, output, on_progress=…, timeout=…)` turns a local file into
+an MP4 that `package()` takes, the way vidlock's own pipeline does, with no
+model, task or storage involved. It returns what it did: `'copied'`,
+`'audio'` or `'reencoded'`, plus the encoder used. See the README, under
+*Calling it from your own pipeline*.
 
 ### 5. Per-range IV (0.5)
 
@@ -290,7 +300,7 @@ No 0.3 setting was renamed or removed, and no default changed.
 | `MAX_UPLOAD_BYTES`, `UPLOAD_PREFIX`, `UPLOAD_TTL` | 0.7 | used only by direct uploads |
 | `TRANSCODE*`, `ENQUEUE_TRANSCODE` | 0.8 | off |
 | `THUMBNAILS`, `THUMBNAIL_OFFSET`, `SPRITE_*`, `POSTER_PUBLIC` | 0.8 | off |
-| `DELIVERY`, `EDGE_URL`, `EDGE_SECRETS` | 0.9 (on `main`) | `'direct'` |
+| `DELIVERY`, `EDGE_URL`, `EDGE_SECRETS` | 0.8.1 | `'direct'` |
 
 `manage.py check` warns about any key it does not know (`vidlock.W001`).
 
@@ -305,7 +315,8 @@ No 0.3 setting was renamed or removed, and no default changed.
 ## A deploy plan
 
 1. Check which 0.3.0 you run ([above](#first-which-030-do-you-have)). If
-   it is the early one, note any watermark codes you still need to trace.
+   it is the early one, upgrade to 0.8.1 or later rather than 0.8.0, so
+   watermark codes recorded before the upgrade still trace.
 2. Upgrade the package on every machine and run `manage.py migrate`
    (`migrate_schemas` with django-tenants).
 3. Switch **all** web workers together, in a quiet hour. Expect up to
