@@ -332,10 +332,10 @@ def queue(model, pk, source_key: str, source_info: str = '') -> bool:
     model._default_manager.filter(pk=pk, video_key=source_key).update(
         sealed_state=model.STATE_PENDING, sealed_error=''
     )
-    record(
-        model, pk, source_key, 'queued', progress=0, error='', encoder='',
-        source_info=source_info[:200], started=None, finished=None,
-    )  # fmt: skip
+    fields = {'progress': 0, 'error': '', 'encoder': '', 'started': None, 'finished': None}
+    if source_info:
+        fields['source_info'] = source_info[:200]
+    record(model, pk, source_key, 'queued', **fields)
     enqueue(model, pk, source_key)
     return True
 

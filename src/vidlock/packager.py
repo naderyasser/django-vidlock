@@ -174,7 +174,21 @@ def probe(path: str) -> Probe:
     )
 
 
-def _probe_json(ffprobe: str, path: str) -> Probe:
+def probe_url(url: str, name: str) -> Probe:
+    """Probe an object in the bucket through a signed URL, reading only the
+    bytes ffprobe needs (the header; for an MP4 with its index at the end,
+    a range there). ``name`` (the object key) picks the demuxer, which is
+    forced as for local files; only HTTP(S) is allowed, nothing else."""
+    ffprobe = ffprobe_binary()
+    if not ffprobe or not url.startswith(('https://', 'http://')):
+        raise PackagingError('probing over HTTP needs ffprobe and an absolute http(s) URL')
+    forced = input_args(name)[:2]
+    return _probe_json(
+        ffprobe, url, (*forced, '-protocol_whitelist', 'https,http,tls,tcp', '-rw_timeout', '30000000')
+    )
+
+
+def _probe_json(ffprobe: str, path: str, inp: tuple[str, ...] | None = None) -> Probe:
     run = subprocess.run(
         [
             ffprobe,
@@ -184,7 +198,7 @@ def _probe_json(ffprobe: str, path: str) -> Probe:
             'stream=codec_type,codec_name,profile,pix_fmt,width,height,color_transfer:format=duration',
             '-of',
             'json',
-            *input_args(path),
+            *(inp or input_args(path)),
             path,
         ],
         check=False,
