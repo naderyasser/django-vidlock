@@ -241,11 +241,18 @@ Each network past `MAX_NETWORKS_PER_DAY` in a day is `many_ips`. Both also
 fire for honest students: a phone moving between Wi-Fi and mobile data
 mid-lesson, or Egyptian mobile carriers changing addresses behind CGNAT.
 
-* **0.8.1 and later:** both are in `RISK_OBSERVE_ONLY` by default. They are
+* **0.8.1 and later, `relaxed` and `balanced` (the default):** both are in
+  `RISK_OBSERVE_ONLY`. They are
   recorded, logged, sent as `vidlock.signals.risk_observed`, shown by
   `manage.py vidlock_risk` as `(observed, not scored)`, and listed in
   `viewer_flagged`'s events. But they add nothing to the score, so they can
   never flag or pause anyone, whatever `RISK_WEIGHTS` says. Nothing to do.
+* **0.8.1 and later, `'PROFILE': 'strict'`:** strict sets
+  `'RISK_OBSERVE_ONLY': ()` and scores both exactly as before, because it is
+  the only profile that pauses viewers (`RISK_SUSPEND_SECONDS` 3600). If
+  you run strict on mobile-heavy audiences, set
+  `'RISK_OBSERVE_ONLY': ['shared_session', 'many_ips']` yourself; your
+  setting wins over the profile.
 * **To score them** once you trust them on your audience, take them off the
   list: `'RISK_OBSERVE_ONLY': ['many_ips']` scores `shared_session` again,
   and `()` scores everything.
@@ -299,7 +306,7 @@ No 0.3 setting was renamed or removed, and no default changed.
 | Added | Since | Off / default |
 |---|---|---|
 | `PROFILE`, `ENFORCE` | 0.5 | `'balanced'`, `True` |
-| `RISK_OBSERVE_ONLY` | 0.8.1 | `('shared_session', 'many_ips')`: recorded, never scored |
+| `RISK_OBSERVE_ONLY` | 0.8.1 | `('shared_session', 'many_ips')`: recorded, never scored; `()` under `strict` |
 | `TRACK_PROGRESS` | 0.4 | `True` (progress from the heartbeat) |
 | `TRANSCRIBER`, `TRANSCRIBE_MODEL`, `TRANSCRIBE_LANGUAGE` | 0.6 | off |
 | `NOTIFIER`, `NOTIFY_WEBHOOK_URL`, `WHATSAPP_*` | 0.6 | off |
