@@ -44,6 +44,11 @@ class SealedBackend:
         """Text drawn over the video for this viewer, or None for none."""
         return None
 
+    def poster_visible(self, video) -> bool:
+        """With ``POSTER_PUBLIC``, whether anyone may see ``video``'s poster and
+        thumbnail without a token (e.g. only published lessons). Default: yes."""
+        return True
+
     def audience(self, video):
         """The users expected to watch ``video`` (its course's enrolments), for
         insights: who has not started. None: count only who did start."""

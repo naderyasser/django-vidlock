@@ -201,3 +201,40 @@ class Transcode(models.Model):
     @classmethod
     def for_video(cls, video):
         return cls.objects.filter(video_type=video._meta.label, video_id=str(video.pk)).first()
+
+
+class Preview(models.Model):
+    """A sealed video's poster, thumbnail and seek-preview sprites
+    (``vidlock.previews``): object keys in your storage, and the sprite
+    layout the thumbnails track is written from."""
+
+    video_type = models.CharField(max_length=100)
+    video_id = models.CharField(max_length=64)
+    #: The sealed .ts these were made for; another one makes them stale.
+    video_key = models.CharField(max_length=500)
+    poster_key = models.CharField(max_length=500, blank=True, default='')
+    thumbnail_key = models.CharField(max_length=500, blank=True, default='')
+    #: Sprite sheet object keys, in order.
+    sprites = models.JSONField(default=list, blank=True)
+    #: Seconds of video per tile, tile size in pixels, tiles per row (and per
+    #: column) of a sheet, and how many tiles there are in all.
+    interval = models.FloatField(default=10)
+    tile_width = models.PositiveIntegerField(default=0)
+    tile_height = models.PositiveIntegerField(default=0)
+    columns = models.PositiveIntegerField(default=10)
+    count = models.PositiveIntegerField(default=0)
+    duration = models.FloatField(default=0)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = (
+            models.UniqueConstraint(fields=('video_type', 'video_id'), name='vidlock_preview_once'),
+        )
+
+    def __str__(self):
+        return f'{self.video_type} {self.video_id} ({len(self.sprites)} sprite sheets)'
+
+    @property
+    def keys(self) -> list[str]:
+        """Every object these previews keep in storage."""
+        return [k for k in (self.poster_key, self.thumbnail_key, *self.sprites) if k]

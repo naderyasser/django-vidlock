@@ -23,8 +23,8 @@ import uuid
 
 from django.db import transaction
 
-from vidlock import conf, keys, packager, signals, transcribe
-from vidlock.playlist import segment_count
+from vidlock import conf, keys, packager, previews, signals, transcribe
+from vidlock.playlist import duration, segment_count
 from vidlock.storage import default_storage
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,7 @@ def seal_local(model, pk, source_key: str, source: str, work: str, storage, dele
     re-encode) in place of the row's ``source_key``, and swap it in."""
     target = sealed_key_for(source_key)
     audio = None
+    made = None
     try:
         ts_path, playlist, key = packager.package(source, work)
         if conf.get('TRANSCRIBER'):
@@ -152,9 +153,14 @@ def seal_local(model, pk, source_key: str, source: str, work: str, storage, dele
         # A storage may save under another name (Django storages avoid
         # overwrites); the name it returns is the one that exists.
         target = storage.upload(ts_path, target, TS_CONTENT_TYPE) or target
+        if previews.enabled():
+            # Never fails the seal: None when they could not be made.
+            made = previews.prepare(source, work, duration(playlist), target, storage)
     except Exception as exc:
         logger.exception('sealing %s %s failed', model.__name__, pk)
         storage.delete(target)
+        for stored in previews.stored_keys(made):
+            storage.delete(stored)
         if audio and os.path.exists(audio):
             os.remove(audio)
         return _mark(model, pk, source_key, model.STATE_FAILED, f'{type(exc).__name__}: {exc}')
@@ -176,16 +182,27 @@ def seal_local(model, pk, source_key: str, source: str, work: str, storage, dele
     except Exception:
         # An object no row names is billed for ever and shows on no meter.
         storage.delete(target)
+        for stored in previews.stored_keys(made):
+            storage.delete(stored)
         if audio and os.path.exists(audio):
             os.remove(audio)
         raise
     if current != [source_key]:
         storage.delete(target)
+        for stored in previews.stored_keys(made):
+            storage.delete(stored)
         if audio and os.path.exists(audio):
             os.remove(audio)
         return _finished(model, pk, 'stale', video_key=(current or [''])[0])
     # Only after the row points at the .ts: a viewer halfway through the MP4
     # gets an error, and a player that retries receives the sealed stream.
+    if made:
+        try:
+            previews.save(model, pk, target, made, storage)
+        except Exception:
+            logger.exception('recording the previews of %s %s failed', model.__name__, pk)
+            for stored in previews.stored_keys(made):
+                storage.delete(stored)
     if delete_source:
         storage.delete(source_key)
     logger.info('%s %s sealed (%s bytes, %s segments)', model.__name__, pk, size, segment_count(playlist))
