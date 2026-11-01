@@ -44,6 +44,10 @@ PIXEL_FORMATS = frozenset({'yuv420p', 'yuvj420p'})
 SAFE_INPUT = ('-f', 'mov', '-protocol_whitelist', 'file')
 #: Containers worth probing. WebM/MKV hold VP8/VP9/AV1 far more often.
 SOURCE_EXTENSIONS = frozenset({'.mp4', '.m4v', '.mov'})
+#: Also taken when ``TRANSCODE`` is on: they always need a re-encode.
+TRANSCODE_EXTENSIONS = frozenset({'.mkv', '.webm'})
+#: Transfer characteristics of HDR video (PQ, HLG): tone-mapped when re-encoding.
+HDR_TRANSFERS = frozenset({'smpte2084', 'arib-std-b67'})
 
 TIMEOUT_SECONDS = 30 * 60
 
@@ -61,6 +65,9 @@ class Probe:
     pix_fmt: str = ''
     profile: str = ''
     duration: float = 0.0
+    width: int = 0
+    height: int = 0
+    color_transfer: str = ''
 
     def __iter__(self):
         # ``video, audio = probe(path)`` keeps working as it did in 0.1.
@@ -76,6 +83,34 @@ class Probe:
         if self.pix_fmt and self.pix_fmt not in PIXEL_FORMATS:
             return f'H.264 in {self.pix_fmt} ({self.profile or "?"}) needs a re-encode to 8-bit 4:2:0'
         return ''
+
+    @property
+    def video_ok(self) -> bool:
+        """The picture can be kept as it is (only the sound may need work)."""
+        return self.video in VIDEO_CODECS and (not self.pix_fmt or self.pix_fmt in PIXEL_FORMATS)
+
+    @property
+    def hdr(self) -> bool:
+        return self.color_transfer in HDR_TRANSFERS
+
+    def describe(self) -> str:
+        """``hevc/aac yuv420p10le 3840x2160`` — for logs, the admin, dry runs."""
+        parts = [f'{self.video or "?"}/{self.audio or "-"}']
+        if self.pix_fmt:
+            parts.append(self.pix_fmt)
+        if self.width and self.height:
+            parts.append(f'{self.width}x{self.height}')
+        if self.hdr:
+            parts.append('HDR')
+        return ' '.join(parts)
+
+
+def input_args(path: str) -> tuple[str, ...]:
+    """How to open ``path``: always a named demuxer, from local disk only
+    (see ``SAFE_INPUT``). Matroska/WebM only for the extensions that are."""
+    if os.path.splitext(path)[1].lower() in TRANSCODE_EXTENSIONS:
+        return ('-f', 'matroska', '-protocol_whitelist', 'file')
+    return SAFE_INPUT
 
 
 def ffmpeg_binary() -> str | None:
@@ -112,15 +147,17 @@ def probe(path: str) -> Probe:
     if not binary:
         raise PackagingError('ffmpeg is not installed')
     run = subprocess.run(
-        [binary, '-hide_banner', '-nostdin', *SAFE_INPUT, '-i', path],
+        [binary, '-hide_banner', '-nostdin', *input_args(path), '-i', path],
         check=False,  # ffmpeg -i with no output always exits 1; stderr is the answer
         capture_output=True,
         text=True,
         timeout=120,
     )
-    video = re.search(r'Stream #\S+.*?: Video: (\w+)(?: \(([^)]*)\))?[^,]*, (\w+)', run.stderr)
+    video = re.search(r'Stream #\S+.*?: Video: (\w+)(?: \(([^)]*)\))?[^,]*, (\w+)(.*)', run.stderr)
     audio = re.search(r'Stream #\S+.*?: Audio: (\w+)', run.stderr)
     length = re.search(r'Duration: (\d+):(\d+):([\d.]+)', run.stderr)
+    size = re.search(r'(\d{2,5})x(\d{2,5})', video.group(4)) if video else None
+    transfer = re.search(r'\b(smpte2084|arib-std-b67)\b', video.group(4)) if video else None
     return Probe(
         video=video.group(1) if video else '',
         audio=audio.group(1) if audio else '',
@@ -131,6 +168,9 @@ def probe(path: str) -> Probe:
             if length
             else 0.0
         ),
+        width=int(size.group(1)) if size else 0,
+        height=int(size.group(2)) if size else 0,
+        color_transfer=transfer.group(1) if transfer else '',
     )
 
 
@@ -141,10 +181,10 @@ def _probe_json(ffprobe: str, path: str) -> Probe:
             '-v',
             'error',
             '-show_entries',
-            'stream=codec_type,codec_name,profile,pix_fmt:format=duration',
+            'stream=codec_type,codec_name,profile,pix_fmt,width,height,color_transfer:format=duration',
             '-of',
             'json',
-            *SAFE_INPUT,
+            *input_args(path),
             path,
         ],
         check=False,
@@ -169,6 +209,9 @@ def _probe_json(ffprobe: str, path: str) -> Probe:
         pix_fmt=video.get('pix_fmt', ''),
         profile=video.get('profile', ''),
         duration=length,
+        width=int(video.get('width') or 0),
+        height=int(video.get('height') or 0),
+        color_transfer=video.get('color_transfer', ''),
     )
 
 

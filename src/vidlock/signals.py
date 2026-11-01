@@ -6,6 +6,12 @@ whatever the outcome. ``sender`` is your model class; keyword arguments:
 (a short message, '' on success) and ``video_key`` (the key now in the row:
 the .ts once sealed, else the source).
 
+``transcode_finished`` — sent by ``vidlock.transcode.run`` when a re-encode
+ends. ``sender`` is your model class; keyword arguments: ``pk``, ``state``
+('sealed', 'failed', 'skipped' or 'stale': what happened to the video),
+``error``, ``encoder`` (the one that did the work, '' if none ran) and
+``video_key``.
+
 ``key_abuse`` — sent the first time in a day that a viewer crosses a key
 limit. ``sender`` is the backend class; keyword arguments: ``request``,
 ``user``, ``video`` and ``reason`` (``vidlock.guard.DEPTH``, ``BREADTH`` or
@@ -38,3 +44,4 @@ key_abuse = Signal()
 viewer_flagged = Signal()
 monitored = Signal()
 transcript_ready = Signal()
+transcode_finished = Signal()
