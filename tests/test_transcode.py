@@ -306,7 +306,7 @@ def test_a_failing_gpu_falls_back_to_libx264(settings, caplog):
     settings.VIDLOCK = {**settings.VIDLOCK, 'TRANSCODE_ENCODER': 'h264_nvenc'}
     calls = []
 
-    def fake_run(args, total, on_progress):
+    def fake_run(args, total, on_progress, timeout=None):
         name = args[args.index('-c:v') + 1]
         calls.append(name)
         if name == 'h264_nvenc':
@@ -315,6 +315,7 @@ def test_a_failing_gpu_falls_back_to_libx264(settings, caplog):
     with (
         mock.patch('vidlock.packager.ffmpeg_binary', return_value='ffmpeg'),
         mock.patch('vidlock.transcode._run', side_effect=fake_run),
+        mock.patch('vidlock.packager.probe', return_value=packager.Probe('h264', 'aac', 'yuv420p')),
     ):
         used = transcode.transcode_file('a.mov', 'out.mp4', packager.Probe('hevc', 'aac'))
     assert used == 'libx264' and calls == ['h264_nvenc', 'libx264']

@@ -22,6 +22,10 @@ score (``vidlock.risk``) reaches ``RISK_THRESHOLD``. Keyword arguments:
 ``user``, ``score``, ``events`` (event name -> count), ``suspended_for``
 (seconds; 0 when only flagged) and ``request``.
 
+``risk_observed`` — an event listed in ``RISK_OBSERVE_ONLY`` happened: it is
+recorded and logged but adds nothing to the score. Keyword arguments:
+``user``, ``event`` and ``request``.
+
 ``transcript_ready`` — a video's transcript was stored. ``sender`` is your
 model class; keyword arguments: ``video``, ``transcript``.
 
@@ -45,3 +49,4 @@ viewer_flagged = Signal()
 monitored = Signal()
 transcript_ready = Signal()
 transcode_finished = Signal()
+risk_observed = Signal()

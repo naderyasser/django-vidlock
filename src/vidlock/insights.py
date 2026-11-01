@@ -25,7 +25,8 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 
 from vidlock import conf
-from vidlock.models import WatchProgress
+from vidlock.backend import ask
+from vidlock.models import WatchProgress, video_label
 
 #: Watched at least this share of the lesson: finished.
 FINISHED = 0.9
@@ -47,12 +48,12 @@ def _clock(seconds: float) -> str:
 
 def for_video(video, quiet_days: int = 7) -> dict:
     rows = list(
-        WatchProgress.objects.filter(video_type=video._meta.label, video_id=str(video.pk)).select_related(
+        WatchProgress.objects.filter(video_type=video_label(video), video_id=str(video.pk)).select_related(
             'user'
         )
     )
     backend = _backend()
-    audience = backend.audience(video) if backend is not None else None
+    audience = ask(backend, 'audience', video)
     watched_by = {row.user_id for row in rows}
     not_started = [u for u in audience if u.pk not in watched_by] if audience is not None else []
     cutoff = timezone.now() - datetime.timedelta(days=quiet_days)

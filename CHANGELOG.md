@@ -1,6 +1,58 @@
 # Changelog
 
-## 0.9.0 — unreleased
+## 0.8.1 — 2026-11-01
+
+### Risk score
+
+* `RISK_OBSERVE_ONLY` (default `('shared_session', 'many_ips')`): listed
+  events are still recorded, logged, sent as the new `risk_observed` signal,
+  shown by `vidlock_risk` and included in `viewer_flagged`'s events, but add
+  nothing to the score, so they can never flag or pause a viewer. Both
+  defaults fire for honest students: switching Wi-Fi and mobile data
+  mid-lesson, and carrier NAT. **Behaviour change:** those two events no
+  longer count towards `RISK_THRESHOLD`; set `'RISK_OBSERVE_ONLY': ()` to
+  score them as before. `risk.state()` returns a viewer's day.
+* The `strict` profile sets `'RISK_OBSERVE_ONLY': ()`: it is the only
+  profile that pauses viewers, so it keeps scoring both events exactly as
+  before. `relaxed` and `balanced` observe them. An explicit
+  `RISK_OBSERVE_ONLY` still overrides the profile.
+
+### For projects that call the packager themselves
+
+* `vidlock.transcode.encode(source, output, …)` (stable API): a local file
+  in, an H.264/AAC MP4 ready for `packager.package` out, with no model,
+  task or storage involved. It copies, re-encodes only the sound, or
+  re-encodes, with the pipeline's encoder detection, HDR tone-mapping,
+  scaling and keyframe rules. Returns an `EncodeResult` (action, encoder,
+  fallback, tone-mapping, time, probes in and out), reports progress and
+  takes a timeout (`TranscodeTimeout`). Keywords override the
+  `TRANSCODE_*` settings; `EncodeOptions.from_settings()` shows the
+  defaults. The pipeline now runs through it.
+
+### Fixes
+
+* Videos that are not models work again. Since 0.4 the heartbeat (with
+  `TRACK_PROGRESS`, the default), since 0.6 the captions view, and since
+  0.8 every `playback_info` call and the poster, thumbnail and seek-preview
+  views read `video._meta`, so an adapter exposing the duck-typed contract
+  (as the 0.3 docs allowed) crashed every sealed playback. Every one now
+  goes through `vidlock.models.video_label(video)`: a model instance's label,
+  unchanged, or the adapter's `video_type`. Model-based projects store and
+  find exactly the same rows.
+* Backends need only `get_video` and `can_watch`. The optional hooks are
+  called through `vidlock.backend.ask()`, which falls back to
+  `SealedBackend`'s defaults, so a backend that does not subclass it (or an
+  older subclass) no longer fails on `namespace`, `client_ip` and the rest.
+  `vidlock_doctor` lists which hooks use defaults.
+* No cost when features are off: `playback_info` queries transcripts only
+  while `TRANSCRIBER` is set, and previews only while `THUMBNAILS` is on;
+  before, every playback ran both queries on empty tables. **Behaviour
+  change:** transcripts or previews stored while a feature was on are not
+  offered after you turn it off.
+* `vidlock_trace` (and `trace.find`, the new `trace.matches`) also find
+  watermark codes drawn by the first 0.3.0 build, which used SHA-1 before
+  SHA-256 was pinned. Leaks recorded before that upgrade trace again; the
+  match is marked as legacy. `--no-legacy` turns it off.
 
 ### Edge delivery in front of R2
 

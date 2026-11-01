@@ -12,6 +12,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.translation import gettext as _
 
 from vidlock import conf, insights, notify
+from vidlock.backend import ask
 from vidlock.models import sealed_models
 
 
@@ -43,7 +44,7 @@ class Command(BaseCommand):
                 text = insights.digest([video], opts['days'])
                 self.stdout.write(text)
                 if opts['send'] and backend is not None:
-                    sent += notify.send(backend.teachers(video), _('Lesson report: %s') % video, text)
+                    sent += notify.send(ask(backend, 'teachers', video), _('Lesson report: %s') % video, text)
                 if opts['nudge']:
                     waiting = insights.for_video(video, opts['days'])['not_started']
                     nudged += notify.send(

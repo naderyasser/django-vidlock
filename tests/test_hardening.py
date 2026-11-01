@@ -5,6 +5,7 @@ import base64
 import datetime
 import io
 import json
+import logging
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
@@ -340,11 +341,104 @@ class TestRisk:
         assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['tamper']
 
     def test_networks(self, student, settings):
-        settings.VIDLOCK = {**settings.VIDLOCK, 'MAX_NETWORKS_PER_DAY': 2}
+        # Scored only when taken off RISK_OBSERVE_ONLY (it is on it by default).
+        settings.VIDLOCK = {**settings.VIDLOCK, 'MAX_NETWORKS_PER_DAY': 2, 'RISK_OBSERVE_ONLY': ()}
         for ip in ('10.0.0.1', '10.0.0.200', '10.0.1.1', '10.0.2.1', '2001:db8::1'):
             risk.seen_from(student, ip)
         # 10.0.0.x is one /24: three networks past the first two... two over.
         assert risk.score(student.pk) == 2 * risk.DEFAULT_WEIGHTS['many_ips']
+
+    def test_networks_are_observed_not_scored_by_default(self, student, settings):
+        settings.VIDLOCK = {**settings.VIDLOCK, 'MAX_NETWORKS_PER_DAY': 2}
+        for ip in ('10.0.0.1', '10.0.1.1', '10.0.2.1', '10.0.3.1'):
+            risk.seen_from(student, ip)
+        assert risk.score(student.pk) == 0
+        assert risk.state(student.pk)['events'] == {'many_ips': 2}
+
+    def test_observed_events_never_move_the_score(self, student, settings, caplog):
+        """However heavy and however often: no score, no flag, no pause."""
+        settings.VIDLOCK = {
+            **settings.VIDLOCK,
+            'RISK_WEIGHTS': {'shared_session': 100, 'many_ips': 100},
+            'RISK_THRESHOLD': 5,
+            'RISK_SUSPEND_SECONDS': 3600,
+        }
+        flagged, observed = [], []
+        signals.viewer_flagged.connect(lambda **kw: flagged.append(kw), weak=False, dispatch_uid='f')
+        signals.risk_observed.connect(lambda **kw: observed.append(kw['event']), weak=False, dispatch_uid='o')
+        caplog.set_level(logging.INFO, logger='vidlock')
+        try:
+            risk.note(student, 'raw_key')  # a scored event first: 1
+            for n in range(50):
+                assert risk.note(student, 'shared_session', once=f'lease-{n}') == 1
+                assert risk.note(student, 'many_ips') == 1
+        finally:
+            signals.viewer_flagged.disconnect(dispatch_uid='f')
+            signals.risk_observed.disconnect(dispatch_uid='o')
+        today = risk.state(student.pk)
+        assert today['score'] == 1 == risk.score(student.pk)
+        assert today['events'] == {'raw_key': 1, 'shared_session': 50, 'many_ips': 50}
+        assert set(today['observed']) == {'shared_session', 'many_ips'}
+        assert not flagged and not risk.is_suspended(student.pk)
+        assert observed.count('shared_session') == 50 and observed.count('many_ips') == 50
+        assert 'observed shared_session for viewer' in caplog.text
+
+        out = io.StringIO()
+        call_command('vidlock_risk', str(student.pk), stdout=out)
+        assert 'shared_session x50 (observed, not scored)' in out.getvalue()
+        assert 'raw_key x1' in out.getvalue() and 'raw_key x1 (observed' not in out.getvalue()
+
+        # A scored event still flags and pauses, and the flag lists what was observed.
+        signals.viewer_flagged.connect(lambda **kw: flagged.append(kw), weak=False, dispatch_uid='f')
+        try:
+            risk.note(student, 'tamper')
+        finally:
+            signals.viewer_flagged.disconnect(dispatch_uid='f')
+        assert flagged and flagged[0]['events']['shared_session'] == 50 and risk.is_suspended(student.pk)
+
+    def test_observe_only_can_be_emptied_or_extended(self, student, settings):
+        settings.VIDLOCK = {**settings.VIDLOCK, 'RISK_OBSERVE_ONLY': ()}
+        risk.note(student, 'shared_session')
+        assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['shared_session']
+        settings.VIDLOCK = {**settings.VIDLOCK, 'RISK_OBSERVE_ONLY': ['tamper']}
+        risk.note(student, 'tamper')
+        assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['shared_session'], 'tamper now observed'
+        assert 'tamper' in risk.state(student.pk)['observed']
+
+    @pytest.mark.parametrize('profile', ['relaxed', 'balanced'])
+    def test_the_lenient_profiles_observe(self, student, settings, profile):
+        settings.VIDLOCK = {**settings.VIDLOCK, 'PROFILE': profile}
+        assert risk.observed_only() == {'shared_session', 'many_ips'}
+        for n in range(10):
+            risk.note(student, 'shared_session', once=f'lease-{n}')
+            risk.note(student, 'many_ips')
+        assert risk.score(student.pk) == 0 and not risk.is_suspended(student.pk)
+
+    def test_strict_scores_both_and_suspends(self, student, settings):
+        """strict is the only profile that pauses viewers, so it keeps scoring
+        shared_session and many_ips as it did before 0.8.1."""
+        settings.VIDLOCK = {**settings.VIDLOCK, 'PROFILE': 'strict'}
+        assert risk.observed_only() == frozenset()
+        risk.note(student, 'many_ips')
+        assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['many_ips']
+        for n in range(3):
+            risk.note(student, 'shared_session', once=f'lease-{n}')
+        assert risk.score(student.pk) == 1 + 3 * 4 >= 10
+        assert risk.is_suspended(student.pk), 'strict suspends for 3600 s'
+        assert not risk.state(student.pk)['observed']
+
+    def test_strict_with_an_explicit_observe_list(self, student, settings):
+        settings.VIDLOCK = {**settings.VIDLOCK, 'PROFILE': 'strict', 'RISK_OBSERVE_ONLY': ['shared_session']}
+        risk.note(student, 'shared_session')
+        risk.note(student, 'many_ips')
+        assert (
+            risk.score(student.pk) == risk.DEFAULT_WEIGHTS['many_ips']
+        ), 'your setting wins over the profile'
+
+    def test_a_zero_weight_observed_event_is_still_recorded(self, student, settings):
+        settings.VIDLOCK = {**settings.VIDLOCK, 'RISK_WEIGHTS': {'shared_session': 0}}
+        risk.note(student, 'shared_session')
+        assert risk.state(student.pk)['events'] == {'shared_session': 1} and risk.score(student.pk) == 0
 
     def test_a_depth_refusal_counts(self, client, rotated, student, settings):
         settings.VIDLOCK = {**settings.VIDLOCK, 'KEY_FETCHES_PER_HOUR': 1}
@@ -355,6 +449,12 @@ class TestRisk:
 
 
 # -- watermark codes ------------------------------------------------------------
+
+
+#: Drawn by the first 0.3.0 build (3f3aa40, SHA-1) under tests.settings'
+#: SECRET_KEY on 2026-10-01: pk -> code.
+LEGACY_CODES = {1: 'HD7Q4C', 2: 'IS2V3Z', 7: '6765YJ'}
+LEGACY_DAY = datetime.date(2026, 10, 1)
 
 
 class TestTrace:
@@ -380,6 +480,34 @@ class TestTrace:
     def test_an_unknown_code(self, student):
         with pytest.raises(CommandError):
             call_command('vidlock_trace', 'AAAAAA', '--days', '3', stdout=io.StringIO())
+
+    def test_codes_from_the_first_030_build_still_trace(self):
+        user = get_user_model().objects.create_user('leaker', pk=7)
+        assert trace.code_for(user, LEGACY_DAY) != LEGACY_CODES[7], 'the current code differs'
+        assert trace.matches(LEGACY_CODES[7], [LEGACY_DAY]) == [
+            {'user_id': 7, 'day': LEGACY_DAY, 'legacy': True}
+        ]
+        assert trace.find('6765yj', [LEGACY_DAY]) == [(7, LEGACY_DAY)]
+        assert trace.find(LEGACY_CODES[7], [LEGACY_DAY], legacy=False) == []
+        out = io.StringIO()
+        call_command('vidlock_trace', LEGACY_CODES[7], '--day', '2026-10-01', stdout=out)
+        assert 'leaker' in out.getvalue() and 'legacy SHA-1 code' in out.getvalue()
+        with pytest.raises(CommandError):
+            call_command('vidlock_trace', LEGACY_CODES[7], '--day', '2026-10-01', '--no-legacy')
+
+    def test_current_codes_are_not_marked_legacy(self, student):
+        code = trace.code_for(student, LEGACY_DAY)
+        assert trace.matches(code, [LEGACY_DAY]) == [
+            {'user_id': student.pk, 'day': LEGACY_DAY, 'legacy': False}
+        ]
+        out = io.StringIO()
+        call_command('vidlock_trace', code, '--day', '2026-10-01', stdout=out)
+        assert 'legacy' not in out.getvalue()
+
+    def test_legacy_codes_under_a_rotated_secret(self, settings):
+        get_user_model().objects.create_user('old', pk=2)
+        settings.SECRET_KEY, settings.SECRET_KEY_FALLBACKS = 'a-new-secret', ['tests-only']
+        assert trace.find(LEGACY_CODES[2], [LEGACY_DAY]) == [(2, LEGACY_DAY)]
 
     def test_codes_can_be_turned_off(self, student, rotated, settings):
         from tests.testapp import backend

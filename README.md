@@ -205,6 +205,24 @@ Then run `python manage.py makemigrations && python manage.py migrate`, and
 a file through your bucket with a Range request, checks the cache and the key
 secrets, and tells you what to fix.
 
+**Keeping your own models.** Neither the mixin nor the base class is
+required. A backend is any object with `get_video` and `can_watch`; the
+other hooks (`namespace`, `watermark`, `client_ip`, `poster_visible`,
+`can_upload`, `audience`, `teachers`, `phone`) fall back to
+`SealedBackend`'s defaults when it leaves them out, and the doctor lists
+which ones do. `get_video` may return an adapter instead of a model, as
+long as it has `pk`, `video_key`, `sealed_playlist`, `sealed_key`,
+`is_sealed`, `sealed_duration`, `key_count` and `content_key(index)`, plus
+`video_type`: the label its watch progress, captions and previews are
+stored under. Use the wrapped model's label (`'videos.Lesson'`) so the
+admin and the management commands find the same rows.
+
+```python
+class SealedLesson:                      # wraps your Lesson, not a model
+    video_type = 'videos.Lesson'
+    def __init__(self, lesson): ...
+```
+
 ### Profiles, and trying it safely
 
 One line picks a whole set of protective settings; anything you set yourself
@@ -221,6 +239,7 @@ VIDLOCK = {..., 'PROFILE': 'strict'}    # or 'relaxed', 'balanced' (the default)
 | One screen at a time | — | — | ✓ |
 | Keys only through the page's exchange | — | — | ✓ |
 | Flagged accounts paused | — | — | 1 hour |
+| `shared_session`, `many_ips` scored | — | — | ✓ |
 
 **Monitor mode.** `'ENFORCE': False` runs every protective rule (key pace
 and limits, one screen, Fetch Metadata, raw keys, automatic pauses) but
@@ -370,6 +389,11 @@ your `SECRET_KEY`:
 manage.py vidlock_trace K7QMZ4               # searches the last 60 days
 manage.py vidlock_trace K7QMZ4 --day 2026-09-25
 ```
+
+It also finds codes drawn by the first 0.3.0 build, which used SHA-1 before
+the algorithm was pinned to SHA-256. Recordings made before such an upgrade
+keep tracing, and the match is marked `legacy SHA-1 code`.
+`--no-legacy` searches current codes only.
 
 ## Who watched what
 
@@ -570,6 +594,45 @@ def enqueue_transcode(model, pk, key):
 # Q_CLUSTER = {'name': 'transcode', 'workers': 1, 'timeout': 15000, 'retry': 16000, ...}
 ```
 
+### Calling it from your own pipeline
+
+Projects that seal with `vidlock.packager` from their own tasks (instead
+of `pipeline.seal`) get the same re-encode as one function. It takes a local
+file and writes a local MP4, with no model, task or storage involved:
+
+```python
+from vidlock import packager
+from vidlock.transcode import TranscodeError, TranscodeTimeout, encode
+
+found = packager.probe(local_upload)
+if found.problem:                      # HEVC, 10-bit, VP9, Opus…: not sealable as it is
+    result = encode(local_upload, local_mp4, on_progress=report, timeout=2 * 3600)
+    local_upload = result.output
+ts_path, playlist, keys = packager.package(local_upload, workdir)
+```
+
+* **What it does:** `encode()` returns an `EncodeResult`.
+  * `action` is `'copied'` (only the container changed), `'audio'`
+    (picture kept, sound re-encoded to AAC) or `'reencoded'`.
+  * `encoder` is `'copy'`, `'libx264'` or the hardware encoder used.
+    `fell_back` means a hardware encoder failed and libx264 did the work.
+  * `tonemapped` says whether HDR was tone-mapped. `seconds` is the time
+    taken.
+  * `source` and `result` are `packager.Probe`s of what went in and what
+    came out.
+* **How it encodes:** exactly as the pipeline does, with the same encoder
+  detection, HDR tone-mapping, scaling (never upscaled) and a keyframe
+  every `SEGMENT_SECONDS`.
+* **Options:** the keywords `height`, `crf`, `preset`, `encoder`,
+  `audio_bitrate`, `keyframe_seconds` and `timeout` override the
+  `TRANSCODE_*` settings for this call. Nothing else is read, and the
+  `TRANSCODE` switch itself is not needed.
+* **Errors:** `TranscodeError` means ffmpeg is missing, there is no
+  picture, ffmpeg failed, or the result still can't be sealed.
+  `TranscodeTimeout` means the encode ran past `timeout`. The output file
+  may then be partial, so delete it.
+* **Stability:** this is a stable API from 0.8.1 on.
+
 ### Videos already marked `skipped`
 
 ```bash
@@ -691,9 +754,9 @@ Each of these adds its weight to a viewer's score for the day:
 | `raw_key` | 1 | A web key fetched without the page's key exchange: a downloader fed a copied cookie (or an iPhone older than iOS 17.1). |
 | `key_without_playback` | 3 | The browser got a key and never reported playing it. |
 | `takeover` | 2 | A device took the stream from another. |
-| `many_ips` | 1 | Each network past `MAX_NETWORKS_PER_DAY`. |
+| `many_ips` | 1 | Each network past `MAX_NETWORKS_PER_DAY`. *Observed only by default (below).* |
 | `tamper` | 4 | The player found MediaSource functions replaced, which is how "save the stream" extensions work. |
-| `shared_session` | 4 | One stream heartbeating from two networks at once: the session cookie was copied to another device, a way of sharing an account that `MAX_STREAMS` alone cannot see. |
+| `shared_session` | 4 | One stream heartbeating from two networks at once: the session cookie was copied to another device, a way of sharing an account that `MAX_STREAMS` alone cannot see. *Observed only by default (below).* |
 
 When the score reaches `RISK_THRESHOLD` (10), vidlock logs a warning and
 sends `vidlock.signals.viewer_flagged`. With `RISK_SUSPEND_SECONDS`, it also
@@ -702,6 +765,17 @@ paused. `manage.py vidlock_risk <user>` shows the score and
 `manage.py vidlock_risk <user> --clear` lifts the pause. Tune the weights
 with `RISK_WEIGHTS`. Behind a proxy or CDN, override
 `SealedBackend.client_ip(request)`.
+
+**Observed only.** Events listed in `RISK_OBSERVE_ONLY` are recorded,
+logged and sent as `vidlock.signals.risk_observed`, and `vidlock_risk` shows
+them as `(observed, not scored)`. But they add nothing to the score, so they
+never flag or pause anyone. By default the list is `('shared_session',
+'many_ips')`: students switch between Wi-Fi and mobile data mid-lesson, and
+carrier NAT (common on Egyptian mobile networks) hands out new addresses,
+so both happen to honest viewers. Watch them for a while; to score one,
+take it off the list (`'RISK_OBSERVE_ONLY': ()` scores everything).
+The `strict` profile, the only one that pauses viewers, sets
+`'RISK_OBSERVE_ONLY': ()` and scores both; your own setting still wins.
 
 ```python
 from django.dispatch import receiver
@@ -907,7 +981,7 @@ recover any video later with `vidlock_export`.
 |---|---|---|
 | `PROFILE` | `'balanced'` | `'relaxed'`, `'balanced'` or `'strict'`: a set of the protective settings below. |
 | `ENFORCE` | `True` | `False` is monitor mode: count what would be refused, refuse nothing. |
-| `BACKEND` | — | Dotted path to your `SealedBackend` subclass. |
+| `BACKEND` | — | Dotted path to your backend: a `SealedBackend` subclass, or any class with `get_video` and `can_watch`. |
 | `STORAGE` | S3Storage | Dotted path to a storage class; `vidlock.storage.DjangoStorage` wraps a Django storage. |
 | `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | | For the default storage. |
 | `DJANGO_STORAGE` | `'default'` | Alias in `settings.STORAGES` used by `DjangoStorage`. |
@@ -924,6 +998,7 @@ recover any video later with `vidlock_export`.
 | `MAX_STREAMS` | `None` | Devices that may play at once per viewer; `1` stops account sharing. |
 | `STREAM_TIMEOUT` / `HEARTBEAT_SECONDS` | `90` / `30` | A stream lapses after this long without a heartbeat / how often the player sends one. |
 | `RISK_THRESHOLD` / `RISK_SUSPEND_SECONDS` / `RISK_WEIGHTS` | `10` / `0` / `{}` | The daily score that flags a viewer, how long a flagged viewer is paused (`0`: flag only), and weight overrides. |
+| `RISK_OBSERVE_ONLY` | `('shared_session', 'many_ips')` (`()` in `strict`) | Events recorded, logged and signalled but never scored. `()` scores everything. |
 | `MAX_NETWORKS_PER_DAY` | `6` | Networks (/24, /48) a viewer may use in a day before each new one adds to the score. |
 | `WATERMARK_CODE` | `True` | Add the traceable code (and time) to the watermark. |
 | `TRACK_PROGRESS` | `True` | Record watch progress from the heartbeat (`vidlock.progress`). |
@@ -966,6 +1041,22 @@ Coming from 0.3, or calling `vidlock.packager` from your own code? Read
 [UPGRADING.md](UPGRADING.md). It lists every change since 0.3 that affects
 integrators, marks the ones that break sessions during a deploy, and gives
 a deploy plan.
+
+**From 0.8.0 to 0.8.1**
+
+* Nothing to migrate. Sealed videos, tokens and watermark codes are
+  unchanged.
+* Captions are offered only while `TRANSCRIBER` is set, and posters and
+  seek previews only while `THUMBNAILS` is on, so playback no longer queries
+  those tables when the features are off.
+* An adapter that is not a model now plays, records progress and serves
+  captions and previews; give it a `video_type` (see "Keeping your own
+  models").
+* `shared_session` and `many_ips` are now observed, not scored, under the
+  `relaxed` and `balanced` profiles (`RISK_OBSERVE_ONLY`). `strict` still
+  scores both. To keep scoring them elsewhere, set `'RISK_OBSERVE_ONLY': ()`.
+* `vidlock_trace` also finds codes drawn by the first 0.3.0 build (SHA-1).
+* New: `vidlock.transcode.encode()` for projects with their own pipeline.
 
 **From 0.7 to 0.8**
 
