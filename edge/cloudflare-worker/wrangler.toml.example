@@ -1,0 +1,26 @@
+# Copy to wrangler.toml, fill in the three marked values, then:
+#   npx wrangler secret put VIDLOCK_EDGE_SECRETS   # paste VIDLOCK['EDGE_SECRETS'], comma-separated
+#   npx wrangler deploy
+name = "vidlock-edge"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# A custom domain on a zone in your Cloudflare account (1/3). The Cache API
+# does nothing on *.workers.dev, so the edge cache needs this.
+routes = [{ pattern = "media.courses.example", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "BUCKET"
+# The bucket vidlock writes to: VIDLOCK['S3_BUCKET'] (2/3). It stays private:
+# no public access, no r2.dev URL.
+bucket_name = "your-vidlock-bucket"
+
+[vars]
+# Your site's origin(s), comma-separated; never '*' (3/3).
+ALLOWED_ORIGINS = "https://courses.example"
+# How long a range stays in each data centre's cache (seconds). Sealed files
+# never change (a re-seal writes a new name), so long is fine.
+CACHE_SECONDS = "2592000"
+
+[observability]
+enabled = true
