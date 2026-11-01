@@ -962,6 +962,11 @@ they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 ## Upgrading
 
+Coming from 0.3, or calling `vidlock.packager` from your own code? Read
+[UPGRADING.md](UPGRADING.md). It lists every change since 0.3 that affects
+integrators, marks the ones that break sessions during a deploy, and gives
+a deploy plan.
+
 **From 0.7 to 0.8**
 
 * Run `manage.py migrate`, which adds the `Transcode` and `Preview` tables.
