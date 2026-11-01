@@ -52,6 +52,12 @@
   `previews.public_url()`. Sprites stay private.
 * `previews.forget(video)` when you delete a video.
 
+### Fixes
+
+* `pip install django-vidlock[transcribe]` caps PyAV below 19: PyAV 19
+  removed an argument faster-whisper 1.2.1 still passes, so every
+  transcription failed with a `TypeError`.
+
 ### Upgrading
 
 Run `migrate` (two new vidlock tables). Nothing else changes until you set

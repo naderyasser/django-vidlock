@@ -50,7 +50,10 @@ dependencies = ["Django>=4.2", "cryptography>=41"]
 s3 = ["boto3>=1.28"]
 test = ["pytest>=8", "pytest-django>=4.8", "pytest-cov>=5", "cryptography>=42", "celery>=5.3"]
 browser = ["playwright>=1.45"]
-transcribe = ["faster-whisper>=1.0"]
+# PyAV 19 dropped av.open(metadata_errors=...), which faster-whisper 1.2.1
+# still passes: every transcription fails with a TypeError. Lift the cap once
+# a faster-whisper release no longer passes it.
+transcribe = ["faster-whisper>=1.0", "av<19"]
 
 [project.urls]
 Homepage = "https://github.com/naderyasser/django-vidlock"
