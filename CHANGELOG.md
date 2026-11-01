@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.0 — unreleased
+## 0.8.1 — 2026-11-01
 
 ### Risk score
 

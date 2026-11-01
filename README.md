@@ -1019,6 +1019,16 @@ they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 ## Upgrading
 
+**From 0.8.0 to 0.8.1**
+
+* Nothing to migrate. Sealed videos, tokens and watermark codes are
+  unchanged.
+* `shared_session` and `many_ips` are now observed, not scored, under the
+  `relaxed` and `balanced` profiles (`RISK_OBSERVE_ONLY`). `strict` still
+  scores both. To keep scoring them elsewhere, set `'RISK_OBSERVE_ONLY': ()`.
+* `vidlock_trace` also finds codes drawn by the first 0.3.0 build (SHA-1).
+* New: `vidlock.transcode.encode()` for projects with their own pipeline.
+
 **From 0.7 to 0.8**
 
 * Run `manage.py migrate`, which adds the `Transcode` and `Preview` tables.
