@@ -357,6 +357,12 @@ class TestRisk:
 # -- watermark codes ------------------------------------------------------------
 
 
+#: Drawn by the first 0.3.0 build (3f3aa40, SHA-1) under tests.settings'
+#: SECRET_KEY on 2026-10-01: pk -> code.
+LEGACY_CODES = {1: 'HD7Q4C', 2: 'IS2V3Z', 7: '6765YJ'}
+LEGACY_DAY = datetime.date(2026, 10, 1)
+
+
 class TestTrace:
     def test_the_watermark_carries_a_code_that_leads_back(self, student, rotated, settings):
         from tests.testapp import backend
@@ -380,6 +386,34 @@ class TestTrace:
     def test_an_unknown_code(self, student):
         with pytest.raises(CommandError):
             call_command('vidlock_trace', 'AAAAAA', '--days', '3', stdout=io.StringIO())
+
+    def test_codes_from_the_first_030_build_still_trace(self):
+        user = get_user_model().objects.create_user('leaker', pk=7)
+        assert trace.code_for(user, LEGACY_DAY) != LEGACY_CODES[7], 'the current code differs'
+        assert trace.matches(LEGACY_CODES[7], [LEGACY_DAY]) == [
+            {'user_id': 7, 'day': LEGACY_DAY, 'legacy': True}
+        ]
+        assert trace.find('6765yj', [LEGACY_DAY]) == [(7, LEGACY_DAY)]
+        assert trace.find(LEGACY_CODES[7], [LEGACY_DAY], legacy=False) == []
+        out = io.StringIO()
+        call_command('vidlock_trace', LEGACY_CODES[7], '--day', '2026-10-01', stdout=out)
+        assert 'leaker' in out.getvalue() and 'legacy SHA-1 code' in out.getvalue()
+        with pytest.raises(CommandError):
+            call_command('vidlock_trace', LEGACY_CODES[7], '--day', '2026-10-01', '--no-legacy')
+
+    def test_current_codes_are_not_marked_legacy(self, student):
+        code = trace.code_for(student, LEGACY_DAY)
+        assert trace.matches(code, [LEGACY_DAY]) == [
+            {'user_id': student.pk, 'day': LEGACY_DAY, 'legacy': False}
+        ]
+        out = io.StringIO()
+        call_command('vidlock_trace', code, '--day', '2026-10-01', stdout=out)
+        assert 'legacy' not in out.getvalue()
+
+    def test_legacy_codes_under_a_rotated_secret(self, settings):
+        get_user_model().objects.create_user('old', pk=2)
+        settings.SECRET_KEY, settings.SECRET_KEY_FALLBACKS = 'a-new-secret', ['tests-only']
+        assert trace.find(LEGACY_CODES[2], [LEGACY_DAY]) == [(2, LEGACY_DAY)]
 
     def test_codes_can_be_turned_off(self, student, rotated, settings):
         from tests.testapp import backend

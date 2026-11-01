@@ -2,6 +2,13 @@
 
 ## 0.9.0 — unreleased
 
+### Fixes
+
+* `vidlock_trace` (and `trace.find`, the new `trace.matches`) also find
+  watermark codes drawn by the first 0.3.0 build, which used SHA-1 before
+  SHA-256 was pinned. Leaks recorded before that upgrade trace again; the
+  match is marked as legacy. `--no-legacy` turns it off.
+
 ### Edge delivery in front of R2
 
 * `DELIVERY = 'edge'` (off by default; `'direct'` is unchanged): the media
