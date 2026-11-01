@@ -493,10 +493,25 @@ VIDLOCK = {
     'ENQUEUE_SEAL': 'vidlock.contrib.celery.enqueue',
     'ENQUEUE_TRANSCODE': 'vidlock.contrib.celery.enqueue_transcode',
 }
-# Redis/SQS brokers re-deliver a task that has not been acknowledged after the
-# visibility timeout (1 hour by default); the tasks are acks_late, so raise it
-# above TRANSCODE_TIMEOUT or a long encode runs twice.
-CELERY_BROKER_TRANSPORT_OPTIONS = {'visibility_timeout': 5 * 3600}
+```
+
+> **Redis or SQS broker: raise the visibility timeout above
+> `TRANSCODE_TIMEOUT`.** vidlock's tasks are `acks_late` (a worker that dies
+> mid-ffmpeg leaves the task for another), so the message stays
+> unacknowledged until the encode ends. Redis and SQS hand an unacknowledged
+> message to another worker once the visibility timeout passes: 1 hour by
+> default on Redis, 30 minutes on SQS. A longer encode then runs twice,
+> and keeps re-running. (RabbitMQ has no visibility timeout; its
+> `consumer_timeout`, 30 minutes by default, must exceed it instead.)
+
+```python
+TRANSCODE_TIMEOUT = 4 * 3600
+VIDLOCK = {..., 'TRANSCODE_TIMEOUT': TRANSCODE_TIMEOUT}
+
+# Redis or SQS: longer than the longest encode, plus room for the upload.
+CELERY_BROKER_TRANSPORT_OPTIONS = {'visibility_timeout': TRANSCODE_TIMEOUT + 3600}
+# RabbitMQ instead: set consumer_timeout in rabbitmq.conf, in milliseconds
+# (e.g. consumer_timeout = 18000000 for 5 hours).
 ```
 
 ```bash
