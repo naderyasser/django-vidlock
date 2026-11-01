@@ -205,6 +205,24 @@ Then run `python manage.py makemigrations && python manage.py migrate`, and
 a file through your bucket with a Range request, checks the cache and the key
 secrets, and tells you what to fix.
 
+**Keeping your own models.** Neither the mixin nor the base class is
+required. A backend is any object with `get_video` and `can_watch`; the
+other hooks (`namespace`, `watermark`, `client_ip`, `poster_visible`,
+`can_upload`, `audience`, `teachers`, `phone`) fall back to
+`SealedBackend`'s defaults when it leaves them out, and the doctor lists
+which ones do. `get_video` may return an adapter instead of a model, as
+long as it has `pk`, `video_key`, `sealed_playlist`, `sealed_key`,
+`is_sealed`, `sealed_duration`, `key_count` and `content_key(index)`, plus
+`video_type`: the label its watch progress, captions and previews are
+stored under. Use the wrapped model's label (`'videos.Lesson'`) so the
+admin and the management commands find the same rows.
+
+```python
+class SealedLesson:                      # wraps your Lesson, not a model
+    video_type = 'videos.Lesson'
+    def __init__(self, lesson): ...
+```
+
 ### Profiles, and trying it safely
 
 One line picks a whole set of protective settings; anything you set yourself
@@ -963,7 +981,7 @@ recover any video later with `vidlock_export`.
 |---|---|---|
 | `PROFILE` | `'balanced'` | `'relaxed'`, `'balanced'` or `'strict'`: a set of the protective settings below. |
 | `ENFORCE` | `True` | `False` is monitor mode: count what would be refused, refuse nothing. |
-| `BACKEND` | — | Dotted path to your `SealedBackend` subclass. |
+| `BACKEND` | — | Dotted path to your backend: a `SealedBackend` subclass, or any class with `get_video` and `can_watch`. |
 | `STORAGE` | S3Storage | Dotted path to a storage class; `vidlock.storage.DjangoStorage` wraps a Django storage. |
 | `S3_BUCKET`, `S3_ENDPOINT_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` | | For the default storage. |
 | `DJANGO_STORAGE` | `'default'` | Alias in `settings.STORAGES` used by `DjangoStorage`. |
@@ -1023,6 +1041,12 @@ they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 * Nothing to migrate. Sealed videos, tokens and watermark codes are
   unchanged.
+* Captions are offered only while `TRANSCRIBER` is set, and posters and
+  seek previews only while `THUMBNAILS` is on, so playback no longer queries
+  those tables when the features are off.
+* An adapter that is not a model now plays, records progress and serves
+  captions and previews; give it a `video_type` (see "Keeping your own
+  models").
 * `shared_session` and `many_ips` are now observed, not scored, under the
   `relaxed` and `balanced` profiles (`RISK_OBSERVE_ONLY`). `strict` still
   scores both. To keep scoring them elsewhere, set `'RISK_OBSERVE_ONLY': ()`.
