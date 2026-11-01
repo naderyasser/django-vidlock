@@ -33,8 +33,8 @@
 
 * The heartbeat's one-per-second limit is per stream, not per clock second.
   It was keyed by `int(time.time())`, so two beats a millisecond apart on
-  either side of a second boundary both got through (and the test for it
-  failed about one run in a hundred).
+  either side of a second boundary both got through, and the test for it
+  failed now and then.
 * HDR uploads are tone-mapped again with ffmpeg 8. Its `-filters` listing
   prints a two-character flag column (`.S zscale V->V`); vidlock only read
   three to six, so it never saw `zscale`, skipped tone-mapping, and wrote
