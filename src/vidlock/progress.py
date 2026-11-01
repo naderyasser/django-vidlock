@@ -44,7 +44,9 @@ MIN_OVERLAP = 3.0
 
 
 def _label(video) -> str:
-    return video._meta.label
+    from vidlock.models import video_label
+
+    return video_label(video)
 
 
 def _clean(watched) -> list[tuple[float, float]]:

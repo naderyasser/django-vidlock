@@ -83,14 +83,18 @@ class Command(BaseCommand):
         cls = conf.load('BACKEND')
         if cls is None:
             return self.bad('backend', "VIDLOCK['BACKEND'] is not set")
-        from vidlock.backend import SealedBackend
+        from vidlock.backend import OPTIONAL, SealedBackend
 
-        missing = [
-            name for name in ('get_video', 'can_watch') if getattr(cls, name) is getattr(SealedBackend, name)
-        ]
+        def own(name):
+            found = getattr(cls, name, None)
+            return callable(found) and found is not getattr(SealedBackend, name)
+
+        missing = [name for name in ('get_video', 'can_watch') if not own(name)]
         if missing:
             return self.bad('backend', f'{cls.__name__} does not implement {", ".join(missing)}')
-        self.good('backend', cls.__name__)
+        defaults = [name for name in OPTIONAL if not own(name)]
+        note = f' (defaults: {", ".join(defaults)})' if defaults else ''
+        self.good('backend', cls.__name__ + note)
 
     def ffmpeg_ok(self):
         binary = packager.ffmpeg_binary()
