@@ -13,6 +13,7 @@ and wrong in production, where a bucket and its CDN should do it.
 
 from __future__ import annotations
 
+import mimetypes
 import os
 import re
 import shutil
@@ -107,6 +108,13 @@ def _ranged(full, start, length):
             yield chunk
 
 
+def _content_type(full: str) -> str:
+    # Like a bucket, which answers with the type each object was stored with.
+    if full.endswith('.ts'):
+        return 'video/mp2t'
+    return mimetypes.guess_type(full)[0] or 'application/octet-stream'
+
+
 def media(request, token):
     _require_debug()
     try:
@@ -127,14 +135,14 @@ def media(request, token):
             response['Content-Range'] = f'bytes */{size}'
             return response
         response = StreamingHttpResponse(
-            _ranged(full, start, end - start + 1), status=206, content_type='video/mp2t'
+            _ranged(full, start, end - start + 1), status=206, content_type=_content_type(full)
         )
         response['Content-Range'] = f'bytes {start}-{end}/{size}'
         response['Content-Length'] = str(end - start + 1)
     else:
         response = FileResponse(
             open(full, 'rb'),  # noqa: SIM115 — FileResponse closes it
-            content_type='video/mp4' if full.endswith('.mp4') else 'video/mp2t',
+            content_type=_content_type(full),
         )
     response['Accept-Ranges'] = 'bytes'
     response['Cache-Control'] = 'private, no-store'

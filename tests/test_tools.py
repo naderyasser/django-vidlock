@@ -57,6 +57,14 @@ class TestDevStorage:
         assert b''.join(answer.streaming_content) == b'0123456789'
         assert client.get(url).status_code == 200
 
+    def test_each_object_is_served_with_its_type(self, client):
+        storage = self.put()
+        assert client.get(storage.signed_url('lessons/1/a.ts', 60))['Content-Type'] == 'video/mp2t'
+        image = self.tmp / 'p.jpg'
+        image.write_bytes(b'\xff\xd8\xff')
+        storage.upload(str(image), 'lessons/1/a.poster.jpg', 'image/jpeg')
+        assert client.get(storage.signed_url('lessons/1/a.poster.jpg', 60))['Content-Type'] == 'image/jpeg'
+
     def test_an_expired_or_forged_link_is_refused(self, client):
         url = self.put().signed_url('lessons/1/a.ts', 60)
         with mock.patch('django.core.signing.time.time', return_value=time.time() + 120):
