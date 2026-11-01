@@ -50,7 +50,7 @@ grep -c "algorithm='sha256'" <that folder>/tokens.py
 | 8 | Key pace taken under a lock | 0.5 | everyone | No |
 | 9 | Malformed key-exchange header → 400 | 0.5 | custom players | No |
 | 10 | vidlock's own tables (migrations 0001–0004) | 0.4, 0.6, 0.8 | everyone | No; run `migrate` before the new code serves |
-| 11 | New settings (39), none renamed or removed | 0.5–0.8.1 | — | No; all opt-in or same defaults |
+| 11 | New settings (36), none renamed or removed | 0.5–0.8.1 | — | No; all opt-in or same defaults |
 | 12 | New endpoints and `playback_info` keys | 0.6–0.8 | custom views and players | No; additive |
 | 13 | `transcribe` extra caps PyAV below 19 | 0.8 | `TRANSCRIBER` users | No |
 
