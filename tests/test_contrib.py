@@ -103,11 +103,19 @@ class TestSharedSession:
     def clock(self):
         self.start = time.time()
 
-    def test_one_stream_on_two_networks_at_once(self, client, lesson, student):
+    def test_one_stream_on_two_networks_at_once(self, client, lesson, student, settings):
+        # Scored only when taken off RISK_OBSERVE_ONLY (it is on it by default).
+        settings.VIDLOCK = {**settings.VIDLOCK, 'RISK_OBSERVE_ONLY': ()}
         assert self.beat(client, lesson, student, '10.0.0.1').status_code == 200
         self.beat(client, lesson, student, '192.168.5.9', after=2)
         self.beat(client, lesson, student, '10.0.0.1', after=4)
         assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['shared_session']
+
+    def test_by_default_it_is_observed_and_never_scored(self, client, lesson, student):
+        assert self.beat(client, lesson, student, '10.0.0.1').status_code == 200
+        self.beat(client, lesson, student, '192.168.5.9', after=2)
+        assert risk.score(student.pk) == 0
+        assert risk.state(student.pk)['events'] == {'shared_session': 1}
 
     def test_a_phone_that_moves_networks_is_not_sharing(self, client, lesson, student):
         self.beat(client, lesson, student, '10.0.0.1')

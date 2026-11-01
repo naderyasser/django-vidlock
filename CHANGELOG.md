@@ -2,6 +2,17 @@
 
 ## 0.9.0 — unreleased
 
+### Risk score
+
+* `RISK_OBSERVE_ONLY` (default `('shared_session', 'many_ips')`): listed
+  events are still recorded, logged, sent as the new `risk_observed` signal,
+  shown by `vidlock_risk` and included in `viewer_flagged`'s events, but add
+  nothing to the score, so they can never flag or pause a viewer. Both
+  defaults fire for honest students: switching Wi-Fi and mobile data
+  mid-lesson, and carrier NAT. **Behaviour change:** those two events no
+  longer count towards `RISK_THRESHOLD`; set `'RISK_OBSERVE_ONLY': ()` to
+  score them as before. `risk.state()` returns a viewer's day.
+
 ### Edge delivery in front of R2
 
 * `DELIVERY = 'edge'` (off by default; `'direct'` is unchanged): the media

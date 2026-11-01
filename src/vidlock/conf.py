@@ -95,6 +95,12 @@ DEFAULTS: dict[str, Any] = {
     # Networks (/24, /48) one viewer may come from in a day before each new
     # one counts towards the risk score. None: not counted.
     'MAX_NETWORKS_PER_DAY': 6,
+    # Risk events that are recorded, logged and signalled (risk_observed) but
+    # add nothing to the score, so they never flag or pause anyone. By default
+    # the two that phones produce honestly: switching Wi-Fi <-> mobile data
+    # mid-stream (shared_session) and carrier NAT handing out new addresses
+    # (many_ips). () scores them like the rest.
+    'RISK_OBSERVE_ONLY': ('shared_session', 'many_ips'),
     # Transcribe every sealed video (captions, search): a dotted path such as
     # 'vidlock.transcribe.FasterWhisper' (pip install django-vidlock[transcribe]).
     'TRANSCRIBER': None,

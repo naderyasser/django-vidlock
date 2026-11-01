@@ -31,6 +31,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'{found}: suspension lifted, score reset'))
             return
         state = cache.get(f'{risk._PREFIX}:score:{namespace}:{found.pk}:{risk._day()}') or {}
-        events = ', '.join(f'{name} x{n}' for name, n in sorted(state.get('events', {}).items())) or 'none'
+        observed = set(state.get('observed', []))
+        events = (
+            ', '.join(
+                f'{name} x{n}' + (' (observed, not scored)' if name in observed else '')
+                for name, n in sorted(state.get('events', {}).items())
+            )
+            or 'none'
+        )
         suspended = ' — SUSPENDED' if risk.is_suspended(found.pk, namespace) else ''
         self.stdout.write(f'{found}: score {state.get("score", 0):g} today ({events}){suspended}')

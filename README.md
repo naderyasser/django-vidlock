@@ -691,9 +691,9 @@ Each of these adds its weight to a viewer's score for the day:
 | `raw_key` | 1 | A web key fetched without the page's key exchange: a downloader fed a copied cookie (or an iPhone older than iOS 17.1). |
 | `key_without_playback` | 3 | The browser got a key and never reported playing it. |
 | `takeover` | 2 | A device took the stream from another. |
-| `many_ips` | 1 | Each network past `MAX_NETWORKS_PER_DAY`. |
+| `many_ips` | 1 | Each network past `MAX_NETWORKS_PER_DAY`. *Observed only by default (below).* |
 | `tamper` | 4 | The player found MediaSource functions replaced, which is how "save the stream" extensions work. |
-| `shared_session` | 4 | One stream heartbeating from two networks at once: the session cookie was copied to another device, a way of sharing an account that `MAX_STREAMS` alone cannot see. |
+| `shared_session` | 4 | One stream heartbeating from two networks at once: the session cookie was copied to another device, a way of sharing an account that `MAX_STREAMS` alone cannot see. *Observed only by default (below).* |
 
 When the score reaches `RISK_THRESHOLD` (10), vidlock logs a warning and
 sends `vidlock.signals.viewer_flagged`. With `RISK_SUSPEND_SECONDS`, it also
@@ -702,6 +702,15 @@ paused. `manage.py vidlock_risk <user>` shows the score and
 `manage.py vidlock_risk <user> --clear` lifts the pause. Tune the weights
 with `RISK_WEIGHTS`. Behind a proxy or CDN, override
 `SealedBackend.client_ip(request)`.
+
+**Observed only.** Events listed in `RISK_OBSERVE_ONLY` are recorded,
+logged and sent as `vidlock.signals.risk_observed`, and `vidlock_risk` shows
+them as `(observed, not scored)`. But they add nothing to the score, so they
+never flag or pause anyone. By default the list is `('shared_session',
+'many_ips')`: students switch between Wi-Fi and mobile data mid-lesson, and
+carrier NAT (common on Egyptian mobile networks) hands out new addresses,
+so both happen to honest viewers. Watch them for a while; to score one,
+take it off the list (`'RISK_OBSERVE_ONLY': ()` scores everything).
 
 ```python
 from django.dispatch import receiver
@@ -924,6 +933,7 @@ recover any video later with `vidlock_export`.
 | `MAX_STREAMS` | `None` | Devices that may play at once per viewer; `1` stops account sharing. |
 | `STREAM_TIMEOUT` / `HEARTBEAT_SECONDS` | `90` / `30` | A stream lapses after this long without a heartbeat / how often the player sends one. |
 | `RISK_THRESHOLD` / `RISK_SUSPEND_SECONDS` / `RISK_WEIGHTS` | `10` / `0` / `{}` | The daily score that flags a viewer, how long a flagged viewer is paused (`0`: flag only), and weight overrides. |
+| `RISK_OBSERVE_ONLY` | `('shared_session', 'many_ips')` | Events recorded, logged and signalled but never scored. `()` scores everything. |
 | `MAX_NETWORKS_PER_DAY` | `6` | Networks (/24, /48) a viewer may use in a day before each new one adds to the score. |
 | `WATERMARK_CODE` | `True` | Add the traceable code (and time) to the watermark. |
 | `TRACK_PROGRESS` | `True` | Record watch progress from the heartbeat (`vidlock.progress`). |
