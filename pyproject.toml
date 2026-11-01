@@ -84,7 +84,7 @@ replacement = '](https://github.com/naderyasser/django-vidlock/blob/main/\1)'
 packages = ["src/vidlock"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/vidlock", "tests", "README.md", "CHANGELOG.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md"]
+include = ["src/vidlock", "tests", "scripts", "edge", "README.md", "CHANGELOG.md", "LICENSE", "SECURITY.md", "CONTRIBUTING.md"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"

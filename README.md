@@ -1020,6 +1020,33 @@ they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 * New checks may skip 10-bit and 4:4:4 H.264 that 0.1 sealed but browsers
   could not play.
 
+## Measuring delivery
+
+`scripts/vidlock_bench.py` measures how a sealed video's bytes reach a
+viewer, from wherever you run it. It needs nothing but Python 3.8+, so copy
+the one file to a laptop in Cairo or Riyadh. It plays through the video's
+byte ranges like a player (the playlist's exact `BYTERANGE`s, in order, on
+one kept-alive connection, then a few seeks) and never asks for a key.
+
+```bash
+# on your server: a playlist URL for an account made for measuring (lives TOKEN_TTL)
+manage.py vidlock_bench_url courses.Lesson 42 --user bench --base https://courses.example
+```
+
+```bash
+# on the client machine
+python3 vidlock_bench.py '<playlist URL>' --label 'Cairo, WE fibre, direct R2' --json cairo-direct.json
+python3 vidlock_bench.py --compare cairo-direct.json riyadh-direct.json
+```
+
+Each request prints its status, size, connect time, TTFB, total time,
+throughput, `cf-cache-status`, the Cloudflare data centre that answered
+(from `cf-ray`, e.g. `CAI`, `JED`, `RUH`) and the `Content-Range`. A range
+the server did not honour is flagged. The summary gives TTFB p50/p90/p99 and
+throughput per pass. `--mode all` plays every range, `--passes 2` repeats
+them (a cache shows `MISS`, then `HIT`), and `--seed` keeps the seeks the
+same between runs, so they compare.
+
 ## Costs
 
 On Cloudflare R2 (free egress), a 45-minute lesson at 10-second segments
