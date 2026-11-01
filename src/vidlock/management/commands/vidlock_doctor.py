@@ -16,6 +16,7 @@ import secrets
 import subprocess
 import tempfile
 import time
+import urllib.error
 import urllib.request
 
 from django.conf import settings
@@ -23,7 +24,7 @@ from django.core.cache import cache, caches
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 
-from vidlock import checks, conf, keys, packager, transcode
+from vidlock import checks, conf, edge, keys, packager, transcode
 from vidlock.storage import default_storage
 
 
@@ -46,6 +47,7 @@ class Command(BaseCommand):
             ('key encryption', self.keys_ok),
             ('database', self.database_ok),
             ('storage', lambda: self.storage_ok(offline)),
+            ('edge', lambda: self.edge_ok(offline)),
         ):
             try:
                 step()
@@ -219,6 +221,57 @@ class Command(BaseCommand):
                 self.warn('storage', f'the bucket ignored the Range header (HTTP {status}); players need it')
             else:
                 self.good('storage', f'{type(storage).__name__}: upload, signed URL and Range reads work')
+        finally:
+            os.unlink(fh.name)
+            storage.delete(key)
+
+    def edge_ok(self, offline):
+        if not edge.enabled():
+            return self.good(
+                'edge', "off (VIDLOCK['DELIVERY'] = 'direct'): players read presigned bucket URLs"
+            )
+        if offline:
+            edge.url_for('vidlock-doctor/x.ts', 60)
+            return self.good('edge', 'URLs sign (not fetched: --offline)')
+        storage = default_storage()
+        key = f'vidlock-doctor/{secrets.token_hex(8)}.ts'
+        body = secrets.token_bytes(4096)
+        with tempfile.NamedTemporaryFile(delete=False) as fh:
+            fh.write(body)
+        try:
+            stored = storage.upload(fh.name, key, 'video/mp2t') or key
+            url = edge.url_for(stored, 60, edge.viewer_tag('vidlock-doctor'))
+            answers = []
+            for _ in range(2):
+                request = urllib.request.Request(url, headers={'Range': 'bytes=0-1023'})
+                started = time.monotonic()
+                with urllib.request.urlopen(request, timeout=20) as answer:
+                    part = answer.read()
+                    answers.append((answer.status, answer.headers, part, (time.monotonic() - started) * 1000))
+            status, headers, part, ms = answers[0]
+            if status != 206 or part != body[:1024]:
+                return self.bad('edge', f'{conf.get("EDGE_URL")} answered {status} with {len(part)} bytes')
+            if not headers.get('x-vidlock-edge'):
+                return self.bad('edge', 'no x-vidlock-edge header: is EDGE_URL routed to the Worker?')
+            tampered = url[:-1] + ('0' if url[-1] != '0' else '1')
+            try:
+                urllib.request.urlopen(
+                    urllib.request.Request(tampered, headers={'Range': 'bytes=0-9'}), timeout=20
+                )
+                return self.bad('edge', 'the Worker served a URL with a tampered signature')
+            except urllib.error.HTTPError as exc:
+                if exc.code != 403:
+                    return self.bad('edge', f'a tampered signature got HTTP {exc.code}, not 403')
+            second = answers[1][1].get('x-vidlock-cache', '?')
+            detail = (
+                f'206, {headers.get("x-vidlock-edge")}, {ms:.0f} ms; second read {second} '
+                f'in {answers[1][3]:.0f} ms; tampered signature 403'
+            )
+            if second != 'HIT':
+                return self.warn(
+                    'edge', detail + ' (a HIT needs the Worker on a custom domain, not workers.dev)'
+                )
+            self.good('edge', detail)
         finally:
             os.unlink(fh.name)
             storage.delete(key)

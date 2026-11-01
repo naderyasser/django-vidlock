@@ -102,6 +102,7 @@ def check_settings(app_configs, **kwargs):
         )
 
     problems.extend(_transcode_problems())
+    problems.extend(_edge_problems())
 
     if not conf.get('KEY_ENCRYPTION_KEYS'):
         problems.append(
@@ -160,4 +161,39 @@ def _transcode_problems():
                     id='vidlock.W010',
                 )
             )
+    return problems
+
+
+def _edge_problems():
+    problems = []
+    delivery = conf.get('DELIVERY')
+    if delivery not in ('direct', 'edge'):
+        return [Error(f"VIDLOCK['DELIVERY'] = {delivery!r} is not 'direct' or 'edge'.", id='vidlock.E008')]
+    if delivery != 'edge':
+        return problems
+    url = conf.get('EDGE_URL') or ''
+    found = [s for s in conf.get('EDGE_SECRETS') or [] if s]
+    if not url or not found:
+        problems.append(
+            Error(
+                "VIDLOCK['DELIVERY'] = 'edge' needs EDGE_URL (the Worker's domain) and EDGE_SECRETS.",
+                hint='See edge/cloudflare-worker/README.md.',
+                id='vidlock.E009',
+            )
+        )
+    if url and not url.startswith('https://'):
+        problems.append(
+            Warning(
+                f"VIDLOCK['EDGE_URL'] = {url!r} is not HTTPS: signed media URLs would travel in the clear.",
+                id='vidlock.W011',
+            )
+        )
+    if any(len(s) < 32 for s in found):
+        problems.append(
+            Warning(
+                'An EDGE_SECRETS entry is shorter than 32 characters.',
+                hint='python -c "import secrets; print(secrets.token_urlsafe(48))"',
+                id='vidlock.W012',
+            )
+        )
     return problems
