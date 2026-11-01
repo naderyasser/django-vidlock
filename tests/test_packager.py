@@ -56,7 +56,13 @@ def test_one_encrypted_file_whose_ranges_decrypt_on_their_own(sample, tmp_path):
     assert segment_count(playlist) == 3
     with open(ts, 'rb') as fh:
         data = fh.read()
-    assert data[0] != 0x47, 'the stored file must not be a playable MPEG-TS'
+    # A clear MPEG-TS has its sync byte (0x47) at every 188-byte packet; the
+    # ciphertext has it by chance, 1 time in 256 at any one place. (Testing
+    # the first byte alone failed once every 256 runs.)
+    starts = range(0, min(len(data), 188 * 50), 188)
+    assert sum(data[i] == 0x47 for i in starts) < len(
+        starts
+    ), 'the stored file must not be a playable MPEG-TS'
 
     # The second range alone: a player seeking there needs nothing before it.
     # No IV attribute: HLS uses each range's media sequence number (the second is 1).
