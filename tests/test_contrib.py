@@ -94,7 +94,7 @@ class TestSharedSession:
 
     def beat(self, client, lesson, student, ip, after=0.0, lease='L1'):
         t = tokens.sign(lesson.pk, student.pk, tokens.APP, tokens.account_fingerprint(student), '', lease)
-        with mock.patch('vidlock.views.time.time', return_value=self.start + after):
+        with mock.patch('time.time', return_value=self.start + after):
             return client.post(
                 f'/sealed/{lesson.pk}/heartbeat?t={t}', '{}', content_type='application/json', REMOTE_ADDR=ip
             )
