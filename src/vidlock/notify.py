@@ -27,6 +27,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from vidlock import conf
+from vidlock.backend import ask
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,7 @@ def whatsapp(users, subject, message):
     text = f'{subject}\n{message}'
     sent = 0
     for user in users:
-        phone = backend.phone(user) if backend is not None else None
+        phone = ask(backend, 'phone', user)
         if not phone:
             continue
         payload = {'messaging_product': 'whatsapp', 'to': str(phone).lstrip('+')}

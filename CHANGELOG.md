@@ -31,6 +31,24 @@
 
 ### Fixes
 
+* Videos that are not models work again. Since 0.4 the heartbeat (with
+  `TRACK_PROGRESS`, the default), since 0.6 the captions view, and since
+  0.8 every `playback_info` call and the poster, thumbnail and seek-preview
+  views read `video._meta`, so an adapter exposing the duck-typed contract
+  (as the 0.3 docs allowed) crashed every sealed playback. Every one now
+  goes through `vidlock.models.video_label(video)`: a model instance's label,
+  unchanged, or the adapter's `video_type`. Model-based projects store and
+  find exactly the same rows.
+* Backends need only `get_video` and `can_watch`. The optional hooks are
+  called through `vidlock.backend.ask()`, which falls back to
+  `SealedBackend`'s defaults, so a backend that does not subclass it (or an
+  older subclass) no longer fails on `namespace`, `client_ip` and the rest.
+  `vidlock_doctor` lists which hooks use defaults.
+* No cost when features are off: `playback_info` queries transcripts only
+  while `TRANSCRIBER` is set, and previews only while `THUMBNAILS` is on;
+  before, every playback ran both queries on empty tables. **Behaviour
+  change:** transcripts or previews stored while a feature was on are not
+  offered after you turn it off.
 * `vidlock_trace` (and `trace.find`, the new `trace.matches`) also find
   watermark codes drawn by the first 0.3.0 build, which used SHA-1 before
   SHA-256 was pinned. Leaks recorded before that upgrade trace again; the

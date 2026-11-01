@@ -48,7 +48,8 @@ from vidlock import (
     uploads,
     wrap,
 )
-from vidlock.models import Transcript
+from vidlock.backend import ask
+from vidlock.models import Transcript, video_label
 from vidlock.playlist import CONTENT_TYPE, duration, render, with_token
 from vidlock.storage import MAX_SIGNED_TTL, default_storage
 
@@ -76,7 +77,7 @@ def media_ttl(video) -> int:
 
 
 def _namespace(backend, request) -> str:
-    return backend.namespace(request) if backend is not None else ''
+    return ask(backend, 'namespace', request)
 
 
 def playback_info(request, video, storage=None, channel=None) -> dict:
@@ -90,7 +91,7 @@ def playback_info(request, video, storage=None, channel=None) -> dict:
     if risk.is_suspended(user.pk, namespace) and monitor.would_refuse('suspended', request, user, video):
         return {'format': 'blocked', 'error': str(_SUSPENDED)}
     extra = {}
-    text = backend.watermark(user, video) if backend is not None else None
+    text = ask(backend, 'watermark', user, video)
     if text:
         extra['watermark'] = f'{text} · {trace.code_for(user)}' if conf.get('WATERMARK_CODE') else str(text)
     if not video.is_sealed:
@@ -106,15 +107,21 @@ def playback_info(request, video, storage=None, channel=None) -> dict:
     if outcome == streams.TOOK:
         risk.note(user, 'takeover', namespace, request)
     if backend is not None:
-        risk.seen_from(user, backend.client_ip(request), namespace, request)
+        risk.seen_from(user, ask(backend, 'client_ip', request), namespace, request)
     risk.sweep(user, namespace, request)
     token = tokens.sign_for(request, video.pk, channel, lease)
 
     def url(name):
         return with_token(request.build_absolute_uri(reverse(name, args=[video.pk])), token)
 
-    captions = Transcript.objects.filter(video_type=video._meta.label, video_id=str(video.pk)).values_list(
-        'language', flat=True
+    # Only with a transcriber configured: otherwise this would be a query on
+    # an empty table for every playback.
+    captions = (
+        Transcript.objects.filter(video_type=video_label(video), video_id=str(video.pk)).values_list(
+            'language', flat=True
+        )
+        if conf.get('TRANSCRIBER')
+        else ()
     )
     if captions:
         extra['captions_url'] = url('vidlock:captions')
@@ -176,7 +183,7 @@ def _viewer(request, video_id, backend, require_session):
     user = get_user_model()._default_manager.filter(pk=found.user_id, is_active=True).first()
     if video is None or user is None or not video.is_sealed:
         raise Http404
-    namespace = backend.namespace(request)
+    namespace = ask(backend, 'namespace', request)
     if not tokens.account_matches(found, user):
         # The password changed since the token was issued.
         return None, _forbidden(_EXPIRED)
@@ -232,7 +239,7 @@ def captions_view(request, video_id):
     if refusal:
         return refusal
     found = Transcript.objects.filter(
-        video_type=viewer.video._meta.label, video_id=str(viewer.video.pk)
+        video_type=video_label(viewer.video), video_id=str(viewer.video.pk)
     ).first()
     if found is None:
         raise Http404
@@ -254,7 +261,7 @@ def _image_view(request, video_id, field):
     public = bool(conf.get('POSTER_PUBLIC'))
     if public:
         video = backend.get_video(video_id)
-        if video is None or not video.is_sealed or not backend.poster_visible(video):
+        if video is None or not video.is_sealed or not ask(backend, 'poster_visible', video):
             raise Http404
     else:
         viewer, refusal = _viewer(request, video_id, backend, require_session=False)
@@ -325,7 +332,7 @@ def key_view(request, video_id):
         risk.note(user, 'raw_key', namespace, request, once=f'{found.lease}|{video.pk}')
         if conf.get('REQUIRE_WRAPPED_KEY') and monitor.would_refuse('raw_key', request, user, video):
             return _forbidden()
-    risk.seen_from(user, backend.client_ip(request), namespace, request)
+    risk.seen_from(user, ask(backend, 'client_ip', request), namespace, request)
 
     key_seconds = video.sealed_duration / count if count > 1 else None
     reason = guard.check_key_fetch(user.pk, video.pk, namespace, index, key_seconds)
@@ -379,7 +386,7 @@ def heartbeat_view(request, video_id):
     if user is None or not tokens.account_matches(found, user):
         return JsonResponse({'error': 'expired'}, status=403)
     backend = _backend()
-    namespace = backend.namespace(request)
+    namespace = ask(backend, 'namespace', request)
     if risk.is_suspended(user.pk, namespace) and monitor.would_refuse('suspended', request, user):
         return JsonResponse({'error': 'suspended', 'message': str(_SUSPENDED)}, status=403)
     # A player beats every 30 s (and on pause); more than once a second from
@@ -408,7 +415,7 @@ def heartbeat_view(request, video_id):
         progress.record(user, video, watched, report.get('position'), namespace)
     if report.get('tamper'):
         risk.note(user, 'tamper', namespace, request, once=found.lease or str(video_id))
-    risk.stream_seen_from(user, found.lease, backend.client_ip(request), namespace, request)
+    risk.stream_seen_from(user, found.lease, ask(backend, 'client_ip', request), namespace, request)
     return JsonResponse({'ok': True, 'interval': int(conf.get('HEARTBEAT_SECONDS'))})
 
 
@@ -422,7 +429,7 @@ def upload_view(request):
     if not user.is_authenticated:
         return JsonResponse({'error': str(_UPLOAD_SIGN_IN)}, status=403)
     backend_cls = conf.load('BACKEND')
-    allowed = backend_cls().can_upload(user) if backend_cls else user.is_staff
+    allowed = ask(backend_cls() if backend_cls else None, 'can_upload', user)
     if not allowed:
         return JsonResponse({'error': str(_UPLOAD_FORBIDDEN)}, status=403)
     try:

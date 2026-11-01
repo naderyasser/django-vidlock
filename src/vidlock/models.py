@@ -11,6 +11,7 @@ from __future__ import annotations
 import math
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 
 from vidlock import keys
@@ -22,6 +23,25 @@ def content_key(keys_blob: bytes, index: int) -> bytes:
     if index < 0 or (index + 1) * 16 > len(keys_blob):
         raise IndexError(f'no key {index}')
     return bytes(keys_blob[index * 16 : index * 16 + 16])
+
+
+def video_label(video) -> str:
+    """The name a video's rows (progress, transcript, previews, transcodes)
+    are stored under. A model instance: its model's label (``app.Model``),
+    as always. Any other object, such as an adapter around your own model
+    that only exposes the duck-typed contract, sets ``video_type``; use the
+    wrapped model's label so the commands and the admin, which work from the
+    model, find the same rows."""
+    meta = getattr(type(video), '_meta', None)
+    if meta is not None:
+        return meta.label
+    label = getattr(video, 'video_type', None)
+    if not label:
+        raise ImproperlyConfigured(
+            f'{type(video).__name__} is not a model: give it a video_type '
+            "(e.g. 'videos.Lesson') to name its progress, captions and previews"
+        )
+    return str(label)
 
 
 class SealedVideoMixin(models.Model):
@@ -200,7 +220,7 @@ class Transcode(models.Model):
 
     @classmethod
     def for_video(cls, video):
-        return cls.objects.filter(video_type=video._meta.label, video_id=str(video.pk)).first()
+        return cls.objects.filter(video_type=video_label(video), video_id=str(video.pk)).first()
 
 
 class Preview(models.Model):

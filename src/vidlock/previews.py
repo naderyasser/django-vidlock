@@ -207,11 +207,13 @@ def save(model, pk, video_key: str, made: dict, storage) -> None:
 
 def current(video):
     """The video's previews, or None when it has none for its current file."""
-    from vidlock.models import Preview
+    from vidlock.models import Preview, video_label
 
     if not video.is_sealed:
         return None
-    found = Preview.objects.filter(video_type=video._meta.label, video_id=str(video.pk)).first()
+    if not conf.get('THUMBNAILS'):
+        return None
+    found = Preview.objects.filter(video_type=video_label(video), video_id=str(video.pk)).first()
     return found if found is not None and found.video_key == video.video_key else None
 
 
@@ -222,9 +224,10 @@ def forget(video, storage=None) -> None:
     you drop a video's file without deleting its row."""
     from django.db import transaction
 
-    from vidlock.models import Preview
+    from vidlock.models import Preview, video_label
 
-    rows = Preview.objects.filter(video_type=video._meta.label, video_id=str(video.pk))
+    label = video_label(video)
+    rows = Preview.objects.filter(video_type=label, video_id=str(video.pk))
     keys = [key for found in rows for key in found.keys]
     if not keys and not rows.exists():
         return
@@ -240,7 +243,7 @@ def forget(video, storage=None) -> None:
             for key in keys:
                 target.delete(key)
         except Exception:
-            logger.exception('vidlock: could not remove the previews of %s %s', video._meta.label, video.pk)
+            logger.exception('vidlock: could not remove the previews of %s %s', label, video.pk)
 
     transaction.on_commit(remove)
 

@@ -86,7 +86,7 @@ def transcriber():
 def transcribe_audio(video, audio_path: str, engine=None):
     """Transcribe ``audio_path`` for ``video`` and store it; returns the
     ``Transcript`` (or None when no transcriber is configured)."""
-    from vidlock.models import Transcript
+    from vidlock.models import Transcript, video_label
 
     engine = engine or transcriber()
     if engine is None:
@@ -95,7 +95,7 @@ def transcribe_audio(video, audio_path: str, engine=None):
     rows = [{'start': round(float(a), 2), 'end': round(float(b), 2), 'text': str(t)} for a, b, t in segments]
     with transaction.atomic():
         found, _ = Transcript.objects.update_or_create(
-            video_type=video._meta.label,
+            video_type=video_label(video),
             video_id=str(video.pk),
             defaults={
                 'language': language or '',
@@ -159,14 +159,14 @@ def search(query: str, videos=None, limit: int = 20) -> list[dict]:
     """Moments where ``query`` is said: ``[{'video_type', 'video_id',
     'start', 'text'}]``, best first. ``videos`` (a queryset or list) limits
     it to those, e.g. the courses a student is enrolled in."""
-    from vidlock.models import Transcript
+    from vidlock.models import Transcript, video_label
 
     needle = normalize(query)
     if not needle:
         return []
     rows = Transcript.objects.filter(search_text__contains=needle)
     if videos is not None:
-        ids = {(v._meta.label, str(v.pk)) for v in videos}
+        ids = {(video_label(v), str(v.pk)) for v in videos}
         rows = [r for r in rows if (r.video_type, r.video_id) in ids]
     found = []
     for row in rows:

@@ -13,6 +13,18 @@ Subclass, then point ``VIDLOCK['BACKEND']`` at it:
 loads: a refund or a revoked enrolment inside a token's few minutes should
 close the door at once, not when the token runs out.
 
+Only ``get_video`` and ``can_watch`` are required, and the backend need not
+subclass ``SealedBackend``: any object with those two methods works. Every
+other hook below is optional; vidlock calls it through ``ask()``, which falls
+back to the default here when your backend does not define it.
+
+The video ``get_video`` returns need not be a model either. Anything with
+``pk``, ``video_key``, ``sealed_playlist``, ``sealed_key``, ``is_sealed``,
+``sealed_duration``, ``key_count`` and ``content_key(index)`` plays; an
+object that is not a model instance also sets ``video_type`` (the wrapped
+model's label, e.g. ``'videos.Lesson'``), which names its progress, captions
+and previews (see ``vidlock.models.video_label``).
+
 ``watermark`` is optional: return a short text (a name, a phone number, an
 order id) and the bundled player draws it over the video, moving, so a screen
 recording names who made it.
@@ -69,3 +81,25 @@ class SealedBackend:
         proxy or CDN, return the header it sets (e.g. CF-Connecting-IP) —
         only if that proxy is the only way in."""
         return request.META.get('REMOTE_ADDR', '')
+
+
+#: The hooks a backend may leave out.
+OPTIONAL = (
+    'can_upload',
+    'namespace',
+    'watermark',
+    'poster_visible',
+    'audience',
+    'teachers',
+    'phone',
+    'client_ip',
+)
+
+
+def ask(backend, name: str, *args):
+    """Call the optional hook ``name`` on ``backend``, or SealedBackend's
+    default when the backend does not define it (or there is no backend)."""
+    method = getattr(backend, name, None) if backend is not None else None
+    if callable(method):
+        return method(*args)
+    return getattr(SealedBackend, name)(backend, *args)
