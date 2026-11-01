@@ -53,6 +53,7 @@ grep -c "algorithm='sha256'" <that folder>/tokens.py
 | 11 | New settings (36), none renamed or removed | 0.5–0.8.1 | — | No; all opt-in or same defaults |
 | 12 | New endpoints and `playback_info` keys | 0.6–0.8 | custom views and players | No; additive |
 | 13 | `transcribe` extra caps PyAV below 19 | 0.8 | `TRANSCRIBER` users | No |
+| 14 | Adapters and plain backends work again | 0.8.1 | projects whose `get_video` returns a non-model, or whose backend does not subclass `SealedBackend` | **Yes on 0.4–0.8.0**: every sealed playback crashes; fixed in 0.8.1 with `video_type` |
 
 ---
 
@@ -323,6 +324,35 @@ No 0.3 setting was renamed or removed, and no default changed.
 * `pip install django-vidlock[transcribe]` now caps PyAV below 19: PyAV 19
   removed an argument faster-whisper 1.2.1 still passes.
 
+### 14. Videos that are not models, and plain backends (0.8.1)
+
+0.3 documented a duck-typed contract: `get_video` may return any object
+with `pk`, `video_key`, `sealed_playlist`, `sealed_key`, `is_sealed`,
+`sealed_duration`, `key_count` and `content_key()`. Releases 0.4 to 0.8.0
+broke it by reading `video._meta.label`:
+
+| Since | Where | Breaks |
+|---|---|---|
+| 0.4 | heartbeat → progress | every heartbeat while `TRACK_PROGRESS` is on (the default) |
+| 0.6 | captions view | every captions request |
+| 0.8 | `playback_info`, previews | every sealed playback, every poster/thumbnail request |
+
+and by calling optional backend hooks (`namespace`, `client_ip`, …)
+directly, which fails on a backend that does not subclass `SealedBackend`.
+
+* **Upgrade straight to 0.8.1.** Do not deploy 0.4–0.8.0 with an adapter.
+* **Give the adapter a `video_type`**, the wrapped model's label (e.g.
+  `video_type = 'videos.Lesson'`). Progress, captions and previews are
+  stored under it, and the admin and commands, which work from the model,
+  find the same rows. Without it playback still works with progress,
+  captions and previews off; with `TRACK_PROGRESS` on, heartbeats stop with
+  an `ImproperlyConfigured` naming `video_type`.
+* **A backend needs only `get_video` and `can_watch`.** Missing optional
+  hooks use `SealedBackend`'s defaults. `manage.py vidlock_doctor` lists
+  which ones do.
+* Model-based projects: nothing changes. A model instance's label is
+  `_meta.label`, as before, even if it has a `video_type` field.
+
 ---
 
 ## A deploy plan
@@ -330,6 +360,8 @@ No 0.3 setting was renamed or removed, and no default changed.
 1. Check which 0.3.0 you run ([above](#first-which-030-do-you-have)). If
    it is the early one, upgrade to 0.8.1 or later rather than 0.8.0, so
    watermark codes recorded before the upgrade still trace.
+   If `get_video` returns an adapter rather than a model, give it a
+   `video_type` first ([entry 14](#14-videos-that-are-not-models-and-plain-backends-081)).
 2. Upgrade the package on every machine and run `manage.py migrate`
    (`migrate_schemas` with django-tenants).
 3. Switch **all** web workers together, in a quiet hour. Expect up to
