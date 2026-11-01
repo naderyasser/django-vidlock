@@ -405,6 +405,36 @@ class TestRisk:
         assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['shared_session'], 'tamper now observed'
         assert 'tamper' in risk.state(student.pk)['observed']
 
+    @pytest.mark.parametrize('profile', ['relaxed', 'balanced'])
+    def test_the_lenient_profiles_observe(self, student, settings, profile):
+        settings.VIDLOCK = {**settings.VIDLOCK, 'PROFILE': profile}
+        assert risk.observed_only() == {'shared_session', 'many_ips'}
+        for n in range(10):
+            risk.note(student, 'shared_session', once=f'lease-{n}')
+            risk.note(student, 'many_ips')
+        assert risk.score(student.pk) == 0 and not risk.is_suspended(student.pk)
+
+    def test_strict_scores_both_and_suspends(self, student, settings):
+        """strict is the only profile that pauses viewers, so it keeps scoring
+        shared_session and many_ips as it did before 0.8.1."""
+        settings.VIDLOCK = {**settings.VIDLOCK, 'PROFILE': 'strict'}
+        assert risk.observed_only() == frozenset()
+        risk.note(student, 'many_ips')
+        assert risk.score(student.pk) == risk.DEFAULT_WEIGHTS['many_ips']
+        for n in range(3):
+            risk.note(student, 'shared_session', once=f'lease-{n}')
+        assert risk.score(student.pk) == 1 + 3 * 4 >= 10
+        assert risk.is_suspended(student.pk), 'strict suspends for 3600 s'
+        assert not risk.state(student.pk)['observed']
+
+    def test_strict_with_an_explicit_observe_list(self, student, settings):
+        settings.VIDLOCK = {**settings.VIDLOCK, 'PROFILE': 'strict', 'RISK_OBSERVE_ONLY': ['shared_session']}
+        risk.note(student, 'shared_session')
+        risk.note(student, 'many_ips')
+        assert (
+            risk.score(student.pk) == risk.DEFAULT_WEIGHTS['many_ips']
+        ), 'your setting wins over the profile'
+
     def test_a_zero_weight_observed_event_is_still_recorded(self, student, settings):
         settings.VIDLOCK = {**settings.VIDLOCK, 'RISK_WEIGHTS': {'shared_session': 0}}
         risk.note(student, 'shared_session')

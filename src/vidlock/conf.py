@@ -232,6 +232,9 @@ PROFILES: dict[str, dict[str, Any]] = {
         'MAX_STREAMS': 1,
         'MAX_NETWORKS_PER_DAY': 4,
         'RISK_SUSPEND_SECONDS': 3600,
+        # The one profile that pauses viewers scores every event, including
+        # shared_session and many_ips (observed only elsewhere).
+        'RISK_OBSERVE_ONLY': (),
     },
 }
 

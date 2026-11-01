@@ -12,6 +12,10 @@
   mid-lesson, and carrier NAT. **Behaviour change:** those two events no
   longer count towards `RISK_THRESHOLD`; set `'RISK_OBSERVE_ONLY': ()` to
   score them as before. `risk.state()` returns a viewer's day.
+* The `strict` profile sets `'RISK_OBSERVE_ONLY': ()`: it is the only
+  profile that pauses viewers, so it keeps scoring both events exactly as
+  before. `relaxed` and `balanced` observe them. An explicit
+  `RISK_OBSERVE_ONLY` still overrides the profile.
 
 ### Edge delivery in front of R2
 

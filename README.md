@@ -221,6 +221,7 @@ VIDLOCK = {..., 'PROFILE': 'strict'}    # or 'relaxed', 'balanced' (the default)
 | One screen at a time | — | — | ✓ |
 | Keys only through the page's exchange | — | — | ✓ |
 | Flagged accounts paused | — | — | 1 hour |
+| `shared_session`, `many_ips` scored | — | — | ✓ |
 
 **Monitor mode.** `'ENFORCE': False` runs every protective rule (key pace
 and limits, one screen, Fetch Metadata, raw keys, automatic pauses) but
@@ -711,6 +712,8 @@ never flag or pause anyone. By default the list is `('shared_session',
 carrier NAT (common on Egyptian mobile networks) hands out new addresses,
 so both happen to honest viewers. Watch them for a while; to score one,
 take it off the list (`'RISK_OBSERVE_ONLY': ()` scores everything).
+The `strict` profile, the only one that pauses viewers, sets
+`'RISK_OBSERVE_ONLY': ()` and scores both; your own setting still wins.
 
 ```python
 from django.dispatch import receiver
@@ -933,7 +936,7 @@ recover any video later with `vidlock_export`.
 | `MAX_STREAMS` | `None` | Devices that may play at once per viewer; `1` stops account sharing. |
 | `STREAM_TIMEOUT` / `HEARTBEAT_SECONDS` | `90` / `30` | A stream lapses after this long without a heartbeat / how often the player sends one. |
 | `RISK_THRESHOLD` / `RISK_SUSPEND_SECONDS` / `RISK_WEIGHTS` | `10` / `0` / `{}` | The daily score that flags a viewer, how long a flagged viewer is paused (`0`: flag only), and weight overrides. |
-| `RISK_OBSERVE_ONLY` | `('shared_session', 'many_ips')` | Events recorded, logged and signalled but never scored. `()` scores everything. |
+| `RISK_OBSERVE_ONLY` | `('shared_session', 'many_ips')` (`()` in `strict`) | Events recorded, logged and signalled but never scored. `()` scores everything. |
 | `MAX_NETWORKS_PER_DAY` | `6` | Networks (/24, /48) a viewer may use in a day before each new one adds to the score. |
 | `WATERMARK_CODE` | `True` | Add the traceable code (and time) to the watermark. |
 | `TRACK_PROGRESS` | `True` | Record watch progress from the heartbeat (`vidlock.progress`). |
