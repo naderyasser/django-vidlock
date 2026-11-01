@@ -29,8 +29,9 @@ Modes (``--mode``):
 * ``seek``: ``--seeks`` random ranges only.
 
 ``--passes 2`` repeats the same ranges: through the edge Worker, the first
-pass shows ``cf-cache-status: MISS`` and the second ``HIT``. Direct signed
-R2 URLs are not cached, so both passes go to R2.
+pass shows ``MISS`` and the second ``HIT`` (the Worker's ``x-vidlock-cache``;
+the ``cache`` column shows ``cf-cache-status`` instead when Cloudflare sends
+one). Direct signed R2 URLs are not cached, so both passes go to R2.
 """
 
 from __future__ import annotations
@@ -223,7 +224,8 @@ def measure(segments, order, passes, timeout, verbose=True, out=None):
                         if result['total_ms']
                         else 0.0
                     ),
-                    'cache': h.get('cf-cache-status', ''),
+                    # Cloudflare's CDN cache, else the edge Worker's own (Cache API).
+                    'cache': h.get('cf-cache-status', '') or h.get('x-vidlock-cache', ''),
                     'colo': colo_of(h),
                     'edge': h.get('x-vidlock-edge', ''),
                     'content_range': h.get('content-range', ''),

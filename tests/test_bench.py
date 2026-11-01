@@ -51,6 +51,17 @@ def test_plans():
     assert len(bench.plan(segments, 'seek', 30, 10, 1)) == 10
 
 
+def test_the_cache_column_reads_the_workers_header_too(monkeypatch):
+    class Edge(bench.Connection):
+        def get(self, url, headers):
+            h = {'x-vidlock-cache': 'HIT', 'content-range': 'bytes 0-999/1750', 'cf-ray': '1-JED'}
+            return {'status': 206, 'headers': h, 'bytes': 1000, 'connect_ms': 1, 'ttfb_ms': 2, 'total_ms': 3}
+
+    monkeypatch.setattr(bench, 'Connection', Edge)
+    (row,) = bench.measure(bench.parse_playlist(PLAYLIST), [0], 1, 5, verbose=False)
+    assert (row['cache'], row['colo'], row['range_ok']) == ('HIT', 'JED', True)
+
+
 def test_colo_and_percentiles():
     assert bench.colo_of({'cf-ray': '8f1d2c3b4a5e6f70-CAI'}) == 'CAI'
     assert bench.colo_of({}) == ''
