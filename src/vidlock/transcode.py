@@ -154,10 +154,19 @@ def _listing(binary: str, what: str) -> frozenset:
         )
     except (OSError, subprocess.SubprocessError):
         return frozenset()
+    return _names(run.stdout)
+
+
+def _names(listing: str) -> frozenset:
+    """The names in ``ffmpeg -filters`` or ``-encoders`` output: each row is
+    a flag column, the name, then more. The flag column is 6 wide for
+    encoders, 3 wide for filters up to ffmpeg 7 and 2 wide from ffmpeg 8
+    (``.S zscale V->V``); legend rows (``T.. = Timeline support``) are not
+    names."""
     names = set()
-    for line in run.stdout.splitlines():
+    for line in listing.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and re.fullmatch(r'[A-Z.]{3,6}', parts[0]):
+        if len(parts) >= 2 and parts[1] != '=' and re.fullmatch(r'[A-Z.|]{2,6}', parts[0]):
             names.add(parts[1])
     return frozenset(names)
 
