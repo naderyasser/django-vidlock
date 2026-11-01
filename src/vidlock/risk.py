@@ -74,11 +74,21 @@ def weights() -> dict:
     return {**DEFAULT_WEIGHTS, **(conf.get('RISK_WEIGHTS') or {})}
 
 
+def observed_only() -> frozenset:
+    """Events that are recorded, logged and signalled but add nothing to the
+    score (``RISK_OBSERVE_ONLY``): they can never flag or pause a viewer."""
+    return frozenset(conf.get('RISK_OBSERVE_ONLY') or ())
+
+
 def note(user, event: str, namespace: str = '', request=None, once: str = '') -> int:
     """Add ``event`` to the viewer's score; returns the score. ``once`` makes
-    the event count at most once per that key and day."""
+    the event count at most once per that key and day. An event listed in
+    ``RISK_OBSERVE_ONLY`` is counted in the day's events (``vidlock_risk``,
+    ``viewer_flagged``), logged and sent as ``risk_observed``, and leaves the
+    score where it was."""
+    observe = event in observed_only()
     weight = float(weights().get(event, 1))
-    if weight <= 0:
+    if weight <= 0 and not observe:
         return 0
     user_id = getattr(user, 'pk', user)
     day = _day()
@@ -87,8 +97,14 @@ def note(user, event: str, namespace: str = '', request=None, once: str = '') ->
             return score(user_id, namespace)
         key = f'{_PREFIX}:score:{namespace}:{user_id}:{day}'
         state = cache.get(key) or {'score': 0.0, 'events': {}}
-        state['score'] += weight
         state['events'][event] = state['events'].get(event, 0) + 1
+        if observe:
+            state['observed'] = sorted({*state.get('observed', []), event})
+            cache.set(key, state, 86400)
+            logger.info('vidlock: observed %s for viewer %s (not scored)', event, user_id)
+            signals.risk_observed.send(sender=None, user=user, event=event, request=request)
+            return state['score']
+        state['score'] += weight
         cache.set(key, state, 86400)
         if state['score'] >= float(conf.get('RISK_THRESHOLD')) and cache.add(
             f'{_PREFIX}:flagged:{namespace}:{user_id}:{day}', 1, 86400
@@ -116,6 +132,19 @@ def _flag(user, state, namespace, request):
         suspended_for=seconds,
         request=request,
     )
+
+
+def state(user_id, namespace: str = '') -> dict:
+    """Today's ``{'score', 'events', 'observed'}`` for a viewer."""
+    try:
+        found = cache.get(f'{_PREFIX}:score:{namespace}:{user_id}:{_day()}') or {}
+    except Exception:
+        found = {}
+    return {
+        'score': found.get('score', 0.0),
+        'events': dict(found.get('events', {})),
+        'observed': list(found.get('observed', [])),
+    }
 
 
 def score(user_id, namespace: str = '') -> float:
