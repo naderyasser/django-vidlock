@@ -46,11 +46,11 @@ grep -c "algorithm='sha256'" <that folder>/tokens.py
 | 4 | Heartbeat checks the session, 1 request/s | 0.5 | custom players, app clients | No for the bundled player; maybe for a custom one |
 | 5 | Per-range IV, no `IV=` attribute | 0.5 | code that parses or rewrites playlists | No; old videos keep their IVs |
 | 6 | ffmpeg/ffprobe open inputs as MP4/MOV only | 0.5 | direct `packager` callers | No; affects new seals |
-| 7 | `shared_session` risk event | 0.3.0 (later build) | everyone on the early 0.3.0 | No, but can flag phones that switch Wi-Fi ↔ 4G |
+| 7 | `shared_session` and `many_ips` observed, not scored | 0.8.1 | everyone | No; 0.8.0 scores them and can pause phones that switch Wi-Fi ↔ 4G |
 | 8 | Key pace taken under a lock | 0.5 | everyone | No |
 | 9 | Malformed key-exchange header → 400 | 0.5 | custom players | No |
 | 10 | vidlock's own tables (migrations 0001–0004) | 0.4, 0.6, 0.8 | everyone | No; run `migrate` before the new code serves |
-| 11 | New settings (35), none renamed or removed | 0.5–0.8 | — | No; all opt-in or same defaults |
+| 11 | New settings (39), none renamed or removed | 0.5–0.8.1 | — | No; all opt-in or same defaults |
 | 12 | New endpoints and `playback_info` keys | 0.6–0.8 | custom views and players | No; additive |
 | 13 | `transcribe` extra caps PyAV below 19 | 0.8 | `TRANSCRIBER` users | No |
 
@@ -233,21 +233,26 @@ deploy.
 
 ## Abuse detection
 
-### 7. `shared_session` (later 0.3.0 build)
+### 7. `shared_session` and `many_ips`: observed, not scored (0.8.1)
 
-A stream that heartbeats from two networks (/24, /48) within 45 seconds
-adds `shared_session` (weight 4) to the viewer's daily risk score. That
-catches a session cookie copied to another device.
+A stream that heartbeats from two networks (/24, /48) within 45 seconds is
+`shared_session`, which catches a session cookie copied to another device.
+Each network past `MAX_NETWORKS_PER_DAY` in a day is `many_ips`. Both also
+fire for honest students: a phone moving between Wi-Fi and mobile data
+mid-lesson, or Egyptian mobile carriers changing addresses behind CGNAT.
 
-**Watch for:** a phone moving between Wi-Fi and mobile data mid-lesson can
-look the same, and Egyptian mobile carriers also change addresses behind
-CGNAT. With `RISK_SUSPEND_SECONDS` > 0, three such switches in a day would
-pause an honest account at the default threshold of 10.
-
-**What to do:** after upgrading, run in monitor mode for a few days
-(`'ENFORCE': False`), then read `manage.py vidlock_status`. If
-`shared_session` fires for honest viewers, lower its weight:
-`'RISK_WEIGHTS': {'shared_session': 1}` (or `0`).
+* **0.8.1 and later:** both are in `RISK_OBSERVE_ONLY` by default. They are
+  recorded, logged, sent as `vidlock.signals.risk_observed`, shown by
+  `manage.py vidlock_risk` as `(observed, not scored)`, and listed in
+  `viewer_flagged`'s events. But they add nothing to the score, so they can
+  never flag or pause anyone, whatever `RISK_WEIGHTS` says. Nothing to do.
+* **To score them** once you trust them on your audience, take them off the
+  list: `'RISK_OBSERVE_ONLY': ['many_ips']` scores `shared_session` again,
+  and `()` scores everything.
+* **0.8.0 and the later 0.3.0 build** score `shared_session` (4 points) and
+  `many_ips` (1). With `RISK_SUSPEND_SECONDS` > 0, three Wi-Fi ↔ 4G
+  switches in a day pause an honest account at the default threshold of
+  10. If you stay on 0.8.0, set `'RISK_WEIGHTS': {'shared_session': 0}`.
 
 ### 8. Key pace under a lock (0.5)
 
@@ -294,6 +299,7 @@ No 0.3 setting was renamed or removed, and no default changed.
 | Added | Since | Off / default |
 |---|---|---|
 | `PROFILE`, `ENFORCE` | 0.5 | `'balanced'`, `True` |
+| `RISK_OBSERVE_ONLY` | 0.8.1 | `('shared_session', 'many_ips')`: recorded, never scored |
 | `TRACK_PROGRESS` | 0.4 | `True` (progress from the heartbeat) |
 | `TRANSCRIBER`, `TRANSCRIBE_MODEL`, `TRANSCRIBE_LANGUAGE` | 0.6 | off |
 | `NOTIFIER`, `NOTIFY_WEBHOOK_URL`, `WHATSAPP_*` | 0.6 | off |
@@ -323,8 +329,9 @@ No 0.3 setting was renamed or removed, and no default changed.
    `TOKEN_TTL` of 403s on tokens minted before the switch (entries 1 and 2).
    The bundled player recovers; check that yours does.
 4. Run `manage.py vidlock_doctor` and `manage.py check`.
-5. Consider `'ENFORCE': False` for a few days to see what `shared_session`
-   and the other rules would do (entry 7), then turn it back on.
+5. Consider `'ENFORCE': False` for a few days to see what the rules would
+   refuse, then turn it back on. `shared_session` and `many_ips` are only
+   observed from 0.8.1 on (entry 7); read them in `manage.py vidlock_risk`.
 6. Your sealed videos need nothing: 0.3 seals keep their keys, IVs and
    playlists.
 
