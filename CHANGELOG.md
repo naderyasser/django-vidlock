@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.8.0 — unreleased
+
+### Re-encoding uploads that cannot be sealed as they are
+
+* `TRANSCODE = True` (recommended; off by default): HEVC, 10-bit and
+  4:2:2/4:4:4 H.264, VP9/AV1 and MKV/WebM uploads are re-encoded to H.264
+  High 8-bit 4:2:0 + AAC, shorter side at most `TRANSCODE_HEIGHT` (720,
+  never upscaled), a keyframe every `SEGMENT_SECONDS`, HDR tone-mapped,
+  metadata dropped, `+faststart`, then sealed like any upload. Before, they
+  were marked `skipped` and stayed unprotected. When only the sound or the
+  container is wrong, the picture is copied.
+* The re-encoded MP4 never reaches the bucket. A failure leaves the upload
+  as it was; a newer upload during the encode wins.
+* Encoders: `TRANSCODE_ENCODER = 'auto'` test-encodes one frame on
+  h264_nvenc, h264_qsv and h264_vaapi and quietly uses libx264 when none
+  works; a hardware failure mid-job retries on libx264. `TRANSCODE_CRF`
+  (23), `TRANSCODE_PRESET` ('veryfast'), `TRANSCODE_AUDIO_BITRATE`,
+  `TRANSCODE_VAAPI_DEVICE`, `TRANSCODE_TIMEOUT` (4 h).
+* Its own queue: `ENQUEUE_TRANSCODE` and `TRANSCODE_QUEUE`
+  ('vidlock-transcode'), with `vidlock.contrib.celery.enqueue_transcode`
+  (time limits above `TRANSCODE_TIMEOUT`) and
+  `vidlock.contrib.django_tasks.enqueue_transcode`; RQ, Huey and Django-Q2
+  examples in the README. Unset, the encode runs inside the seal job, and
+  `manage.py check` says what that risks (`vidlock.W009`).
+* The new `vidlock.Transcode` table records state, progress, encoder, the
+  source's codecs and errors (run `migrate`). The admin shows *Re-encoding
+  42% · libx264* and has a *Re-encode and seal* action.
+* `manage.py vidlock_transcode` for videos already `skipped`; `--dry-run`
+  probes each through a signed URL and prints codec, resolution, duration
+  and size, with totals.
+* `vidlock.signals.transcode_finished`; checks `W009`, `W010`, `E006`,
+  `E007`; a `vidlock_doctor` step that reports which encoders really work.
+* `pipeline.seal()` may return `'transcoding'` (handed to the queue).
+  `Probe` gains `width`, `height`, `color_transfer`, `video_ok`, `hdr` and
+  `describe()`; `packager.probe_url()`.
+
+### Posters and seek previews
+
+* `THUMBNAILS = True`: a poster, a thumbnail (`THUMBNAIL_OFFSET`) and seek
+  preview sprite sheets (`SPRITE_INTERVAL`, `SPRITE_WIDTH`,
+  `SPRITE_COLUMNS`) are made in the job that seals, stored next to the
+  sealed file and recorded in the new `vidlock.Preview` table.
+* Served behind the viewer's token and `can_watch()`: `vidlock:poster`,
+  `vidlock:thumbnail` (redirects to a short-lived signed URL) and
+  `vidlock:thumbnails` (WebVTT). `playback_info` adds `poster_url` and
+  `thumbnails_url`; the player sets the poster and has
+  `thumbnailAt(seconds)`.
+* `POSTER_PUBLIC = True` serves the poster and thumbnail without a token
+  for course pages, subject to `SealedBackend.poster_visible()`;
+  `previews.public_url()`. Sprites stay private.
+* `previews.forget(video)` when you delete a video.
+
+### Upgrading
+
+Run `migrate` (two new vidlock tables). Nothing else changes until you set
+`TRANSCODE` or `THUMBNAILS`.
+
 ## 0.7.0 — 2026-09-29
 
 ### Uploads straight to the bucket

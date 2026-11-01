@@ -137,3 +137,49 @@ msgstr "سجّل الدخول لرفع الفيديو."
 
 msgid "You may not upload videos."
 msgstr "غير مسموح لك برفع الفيديوهات."
+
+msgid "Waiting to re-encode"
+msgstr "في انتظار إعادة الترميز"
+
+#, python-format
+msgid "Re-encoding %(percent)d%%"
+msgstr "جارٍ إعادة الترميز %(percent)d%%"
+
+msgid "Re-encode"
+msgstr "إعادة الترميز"
+
+#, python-format
+msgid "from %(source)s"
+msgstr "من %(source)s"
+
+#, python-format
+msgid "%(minutes)s min"
+msgstr "%(minutes)s دقيقة"
+
+msgid "Re-encode and seal (skipped or failed videos)"
+msgstr "إعادة الترميز ثم التشفير (الفيديوهات المتخطاة أو الفاشلة)"
+
+msgid "Turn on VIDLOCK['TRANSCODE'] to re-encode videos."
+msgstr "فعّل VIDLOCK['TRANSCODE'] لإعادة ترميز الفيديوهات."
+
+#, python-format
+msgid "%d video sent for re-encoding."
+msgid_plural "%d videos sent for re-encoding."
+msgstr[0] "تم إرسال %d فيديو لإعادة الترميز."
+msgstr[1] "تم إرسال %d فيديو لإعادة الترميز."
+msgstr[2] "تم إرسال %d فيديو لإعادة الترميز."
+msgstr[3] "تم إرسال %d فيديوهات لإعادة الترميز."
+msgstr[4] "تم إرسال %d فيديو لإعادة الترميز."
+msgstr[5] "تم إرسال %d فيديو لإعادة الترميز."
+
+msgid "Nothing to re-encode among the selected videos."
+msgstr "لا يوجد ما يحتاج إلى إعادة ترميز بين الفيديوهات المحددة."
+
+msgid "Waiting"
+msgstr "في الانتظار"
+
+msgid "Running"
+msgstr "قيد التشغيل"
+
+msgid "Done"
+msgstr "تم"
