@@ -162,3 +162,79 @@ class Transcript(models.Model):
 
     def __str__(self):
         return f'{self.video_type} {self.video_id} ({self.language or "?"})'
+
+
+class Transcode(models.Model):
+    """The re-encode of one video whose upload could not be sealed as it was
+    (``vidlock.transcode``): where it stands, how far along, what it used."""
+
+    STATE_QUEUED, STATE_RUNNING, STATE_DONE, STATE_FAILED = 'queued', 'running', 'done', 'failed'
+
+    video_type = models.CharField(max_length=100)
+    video_id = models.CharField(max_length=64)
+    #: The upload this re-encode is for; a newer upload makes it stale.
+    source_key = models.CharField(max_length=500, blank=True, default='')
+    state = models.CharField(max_length=10, blank=True, default='')
+    #: 0.0 to 1.0, while running.
+    progress = models.FloatField(default=0)
+    #: The encoder that did (or is doing) the work: 'libx264', 'h264_nvenc'…
+    encoder = models.CharField(max_length=32, blank=True, default='')
+    #: What was uploaded, as ``vidlock.packager.Probe.describe`` puts it.
+    source_info = models.CharField(max_length=200, blank=True, default='')
+    error = models.CharField(max_length=300, blank=True, default='')
+    started = models.DateTimeField(null=True, blank=True)
+    finished = models.DateTimeField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = (
+            models.UniqueConstraint(fields=('video_type', 'video_id'), name='vidlock_transcode_once'),
+        )
+
+    def __str__(self):
+        return f'{self.video_type} {self.video_id}: {self.state or "-"}'
+
+    @property
+    def active(self) -> bool:
+        return self.state in (self.STATE_QUEUED, self.STATE_RUNNING)
+
+    @classmethod
+    def for_video(cls, video):
+        return cls.objects.filter(video_type=video._meta.label, video_id=str(video.pk)).first()
+
+
+class Preview(models.Model):
+    """A sealed video's poster, thumbnail and seek-preview sprites
+    (``vidlock.previews``): object keys in your storage, and the sprite
+    layout the thumbnails track is written from."""
+
+    video_type = models.CharField(max_length=100)
+    video_id = models.CharField(max_length=64)
+    #: The sealed .ts these were made for; another one makes them stale.
+    video_key = models.CharField(max_length=500)
+    poster_key = models.CharField(max_length=500, blank=True, default='')
+    thumbnail_key = models.CharField(max_length=500, blank=True, default='')
+    #: Sprite sheet object keys, in order.
+    sprites = models.JSONField(default=list, blank=True)
+    #: Seconds of video per tile, tile size in pixels, tiles per row (and per
+    #: column) of a sheet, and how many tiles there are in all.
+    interval = models.FloatField(default=10)
+    tile_width = models.PositiveIntegerField(default=0)
+    tile_height = models.PositiveIntegerField(default=0)
+    columns = models.PositiveIntegerField(default=10)
+    count = models.PositiveIntegerField(default=0)
+    duration = models.FloatField(default=0)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = (
+            models.UniqueConstraint(fields=('video_type', 'video_id'), name='vidlock_preview_once'),
+        )
+
+    def __str__(self):
+        return f'{self.video_type} {self.video_id} ({len(self.sprites)} sprite sheets)'
+
+    @property
+    def keys(self) -> list[str]:
+        """Every object these previews keep in storage."""
+        return [k for k in (self.poster_key, self.thumbnail_key, *self.sprites) if k]

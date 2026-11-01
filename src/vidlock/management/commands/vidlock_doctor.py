@@ -15,6 +15,7 @@ import os
 import secrets
 import subprocess
 import tempfile
+import time
 import urllib.request
 
 from django.conf import settings
@@ -22,7 +23,7 @@ from django.core.cache import cache, caches
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 
-from vidlock import checks, conf, keys, packager
+from vidlock import checks, conf, keys, packager, transcode
 from vidlock.storage import default_storage
 
 
@@ -40,6 +41,7 @@ class Command(BaseCommand):
             ('settings', self.settings_ok),
             ('backend', self.backend_ok),
             ('ffmpeg', self.ffmpeg_ok),
+            ('transcode', self.transcode_ok),
             ('cache', self.cache_ok),
             ('key encryption', self.keys_ok),
             ('database', self.database_ok),
@@ -119,6 +121,53 @@ class Command(BaseCommand):
             'ffmpeg',
             f'{binary}, ffprobe {"found" if probe else "missing (slower fallback)"}; seal + unseal work',
         )
+
+    def transcode_ok(self):
+        if not conf.get('TRANSCODE'):
+            return self.good('transcode', "off (VIDLOCK['TRANSCODE']): HEVC/10-bit uploads stay unsealed")
+        binary = packager.ffmpeg_binary()
+        if not binary:
+            return self.warn('transcode', 'no ffmpeg here: needed on the worker that runs the re-encodes')
+        compiled = transcode.compiled_encoders(binary)
+        missing = {'libx264', 'aac'} - compiled
+        if missing:
+            return self.bad('transcode', f'ffmpeg has no {" or ".join(sorted(missing))} encoder')
+        hardware = [
+            f'{name} {"works" if transcode.works(name, binary) else "not usable"}'
+            for name in transcode.HARDWARE
+            if name in compiled
+        ]
+        chosen = transcode.encoder()
+        with tempfile.TemporaryDirectory(prefix='vidlock-doctor-') as work:
+            clip = os.path.join(work, 'clip.mp4')
+            # 4:4:4 H.264: plays in VLC, nowhere else — exactly what needs a re-encode.
+            made = subprocess.run(
+                [
+                    binary, '-hide_banner', '-loglevel', 'error', '-nostdin',
+                    '-f', 'lavfi', '-i', 'testsrc2=duration=2:size=640x360:rate=25',
+                    '-f', 'lavfi', '-i', 'sine=duration=2',
+                    '-c:v', 'libx264', '-pix_fmt', 'yuv444p', '-c:a', 'aac', '-shortest', clip,
+                ],
+                capture_output=True, text=True, timeout=120, check=False,
+            )  # fmt: skip
+            if made.returncode:
+                return self.bad('transcode', 'could not make a test clip')
+            found = packager.probe(clip)
+            started = time.monotonic()
+            used = transcode.transcode_file(clip, os.path.join(work, 'out.mp4'), found)
+            took = time.monotonic() - started
+            after = packager.probe(os.path.join(work, 'out.mp4'))
+            if after.problem:
+                return self.bad('transcode', f'the re-encoded clip still cannot be sealed: {after.problem}')
+            packager.package(os.path.join(work, 'out.mp4'), work)
+        detail = f'{used} ({chosen} chosen; 2 s clip in {took:.1f} s)'
+        if hardware:
+            detail += '; ' + ', '.join(hardware)
+        if not transcode.has_filter('zscale', binary):
+            detail += '; no zscale: HDR uploads are converted without tone-mapping'
+        if not conf.get('ENQUEUE_TRANSCODE'):
+            return self.warn('transcode', detail + '; ENQUEUE_TRANSCODE unset: encodes run inside seal jobs')
+        self.good('transcode', detail)
 
     def cache_ok(self):
         key = f'vidlock:doctor:{secrets.token_hex(4)}'

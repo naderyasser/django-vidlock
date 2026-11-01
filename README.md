@@ -11,8 +11,11 @@ upload into encrypted HLS stored as a single file. Someone who downloads that
 file gets nothing playable without its key. The key goes only to a viewer
 you approve, for a few minutes, and download tools are refused.
 
-It needs no DRM licence, no video service and no re-encoding. Each upload
-takes one `ffmpeg -c copy` run and ends up as one object in your bucket.
+It needs no DRM licence and no video service. An H.264 upload (nearly every
+camera, phone export and screen recorder) takes one `ffmpeg -c copy` run and
+ends up as one object in your bucket; anything else (HEVC from an iPhone,
+10-bit, WebM) can be re-encoded on your own worker first, with
+[`TRANSCODE`](#uploads-that-need-a-re-encode).
 Viewers watch in hls.js, Safari, iOS, ExoPlayer or AVPlayer.
 
 [العربية ↓](#بالعربي)
@@ -142,9 +145,11 @@ cd example && pip install -e .. && python manage.py migrate && python manage.py 
   `pip install django-vidlock[s3]`, or any Django storage backend, such as
   Google Cloud Storage or Azure through django-storages
 * Sources in H.264 8-bit 4:2:0 with AAC or MP3 audio, which is what nearly
-  every camera, phone export and screen recorder produces. Anything else
-  (HEVC from an iPhone, 10-bit H.264, WebM) is left as uploaded and marked
-  `skipped`, with the reason. Sealing never re-encodes.
+  every camera, phone export and screen recorder produces, are sealed as
+  they are. Anything else (HEVC from an iPhone, 10-bit H.264, WebM) is left
+  as uploaded and marked `skipped`, with the reason, **unless you turn on
+  [`TRANSCODE`](#uploads-that-need-a-re-encode)** (recommended), which
+  re-encodes it to H.264 on your worker and then seals it.
 
 ## Quick start
 
@@ -422,6 +427,211 @@ For Arabic lessons use `small` or larger; `tiny` is for trying it out. Any
 class with `transcribe(audio_path, language) -> (language, [(start, end,
 text)])` can replace Whisper, a cloud speech API for example.
 
+## Uploads that need a re-encode
+
+Without it, an upload in HEVC (every recent iPhone), 10-bit or 4:2:2 H.264,
+VP9/AV1, or MKV/WebM is marked `skipped` and stays **as uploaded, unprotected**.
+Turn re-encoding on; it is the recommended setting:
+
+```python
+VIDLOCK = {
+    ...,
+    'TRANSCODE': True,
+    'ENQUEUE_TRANSCODE': 'vidlock.contrib.celery.enqueue_transcode',  # its own queue, see below
+}
+```
+
+The seal job notices the upload needs a re-encode and hands it to
+`ENQUEUE_TRANSCODE`, which re-encodes it and seals the result the usual way.
+
+* **Output:** H.264 High, 8-bit 4:2:0, AAC, `+faststart`. The shorter side
+  is at most `TRANSCODE_HEIGHT` (720: 1280×720, or 720×1280 for portrait) and
+  never upscaled. A keyframe every `SEGMENT_SECONDS` keeps ranges even.
+  iPhone HDR (HLG/Dolby Vision base layer) is tone-mapped to SDR when ffmpeg
+  has zscale. Metadata (GPS from phones) is dropped.
+* **Only what is needed:** if only the sound (Opus, AC-3) or the container
+  (MKV) is wrong, the picture is copied and the job takes seconds.
+* **No clear copy in the bucket:** the re-encoded MP4 lives in the job's
+  temporary folder and is sealed straight away. A failure leaves the upload
+  exactly as it was; a newer upload during the encode wins.
+* **Quality and speed:** `TRANSCODE_CRF = 23`, `TRANSCODE_PRESET =
+  'veryfast'` (libx264). On 4 vCPUs, 1080p 10-bit HEVC became 720p H.264 at
+  about 5× real time on a test pattern, and HDR (tone-mapped) at about 2.4×;
+  real camera footage is slower. Plan on minutes per lesson, not seconds.
+* **Hardware encoders:** `TRANSCODE_ENCODER = 'auto'` test-encodes one frame
+  with h264_nvenc, h264_qsv and h264_vaapi (being compiled into ffmpeg does
+  not mean the GPU is there), remembers the answer per process and otherwise
+  uses libx264, without a warning: a server with no GPU just uses libx264.
+  `'libx264'` turns hardware off; `'h264_nvenc'` (etc.) forces one. A
+  hardware encode that fails mid-job is retried once on libx264.
+  `manage.py vidlock_doctor` shows what works on the machine.
+* **While it waits and encodes** the video is `pending`, and viewers get
+  exactly what they get for any unsealed video today: the signed MP4.
+  Nothing new is exposed, and nothing is protected yet.
+
+### Production setup: a queue of its own
+
+A re-encode takes minutes to hours; a seal takes seconds. Keep them apart, or
+one 4K upload holds every seal behind it. Without `ENQUEUE_TRANSCODE` the
+encode runs **inside the seal job**. `manage.py check` warns about this
+(`vidlock.W009`): it can block the seal queue for hours, and a worker time
+limit shorter than `TRANSCODE_TIMEOUT` (4 hours) kills the encode halfway.
+The recommended setup:
+
+* the `vidlock-transcode` queue (`TRANSCODE_QUEUE`);
+* a **dedicated worker** for it, on the machine with the CPU (or GPU);
+* **concurrency 1** (ffmpeg already uses every core);
+* a **time limit of at least `TRANSCODE_TIMEOUT`**. vidlock kills ffmpeg
+  itself at `TRANSCODE_TIMEOUT` and records why.
+
+**Celery.** The wrapper sends re-encodes to `TRANSCODE_QUEUE` with
+`soft_time_limit`/`time_limit` set just above `TRANSCODE_TIMEOUT`:
+
+```python
+VIDLOCK = {
+    ...,
+    'ENQUEUE_SEAL': 'vidlock.contrib.celery.enqueue',
+    'ENQUEUE_TRANSCODE': 'vidlock.contrib.celery.enqueue_transcode',
+}
+```
+
+> **Redis or SQS broker: raise the visibility timeout above
+> `TRANSCODE_TIMEOUT`.** vidlock's tasks are `acks_late` (a worker that dies
+> mid-ffmpeg leaves the task for another), so the message stays
+> unacknowledged until the encode ends. Redis and SQS hand an unacknowledged
+> message to another worker once the visibility timeout passes: 1 hour by
+> default on Redis, 30 minutes on SQS. A longer encode then runs twice,
+> and keeps re-running. (RabbitMQ has no visibility timeout; its
+> `consumer_timeout`, 30 minutes by default, must exceed it instead.)
+
+```python
+TRANSCODE_TIMEOUT = 4 * 3600
+VIDLOCK = {..., 'TRANSCODE_TIMEOUT': TRANSCODE_TIMEOUT}
+
+# Redis or SQS: longer than the longest encode, plus room for the upload.
+CELERY_BROKER_TRANSPORT_OPTIONS = {'visibility_timeout': TRANSCODE_TIMEOUT + 3600}
+# RabbitMQ instead: set consumer_timeout in rabbitmq.conf, in milliseconds
+# (e.g. consumer_timeout = 18000000 for 5 hours).
+```
+
+```bash
+celery -A proj worker -Q celery --concurrency 4                                  # seals and everything else
+celery -A proj worker -Q vidlock-transcode --concurrency 1 --prefetch-multiplier 1  # re-encodes only
+```
+
+**Django 6 Tasks.** List the queue in the backend, and run a worker for it
+alone:
+
+```python
+VIDLOCK = {
+    ...,
+    'ENQUEUE_SEAL': 'vidlock.contrib.django_tasks.enqueue',
+    'ENQUEUE_TRANSCODE': 'vidlock.contrib.django_tasks.enqueue_transcode',
+}
+TASKS = {
+    'default': {
+        'BACKEND': 'django_tasks.backends.database.DatabaseBackend',  # any background backend
+        'QUEUES': ['default', 'vidlock-transcode'],
+    }
+}
+```
+
+```bash
+manage.py db_worker --queue-name default            # seals
+manage.py db_worker --queue-name vidlock-transcode  # re-encodes, one at a time
+```
+
+**Other runners.** `vidlock.transcode.run(model, pk, video_key)` is the job;
+point `ENQUEUE_TRANSCODE` at a function that queues it:
+
+```python
+# RQ: the default job_timeout is 3 minutes. Raise it.
+def enqueue_transcode(model, pk, key):
+    Queue('vidlock-transcode', connection=redis).enqueue(
+        transcode.run, model, pk, key, job_timeout=conf.get('TRANSCODE_TIMEOUT') + 600
+    )
+# worker: rq worker vidlock-transcode   (one process = concurrency 1)
+
+# Huey: a second Huey instance is a second queue.
+encodes = RedisHuey('vidlock-transcode')
+
+@encodes.task()
+def transcode_task(label, pk, key):
+    return transcode.run(apps.get_model(label), pk, key)
+
+def enqueue_transcode(model, pk, key):
+    transcode_task(model._meta.label, pk, key)
+# worker: huey_consumer proj.tasks.encodes -w 1
+
+# Django-Q2: a cluster of its own; its timeout above TRANSCODE_TIMEOUT and its
+# retry above the timeout, or the task is handed out twice.
+def enqueue_transcode(model, pk, key):
+    async_task('vidlock.transcode.run', model, pk, key, cluster='transcode')
+# Q_CLUSTER = {'name': 'transcode', 'workers': 1, 'timeout': 15000, 'retry': 16000, ...}
+```
+
+### Videos already marked `skipped`
+
+```bash
+manage.py vidlock_transcode --dry-run      # what is waiting, and how much of it
+manage.py vidlock_transcode --queue        # hand them all to ENQUEUE_TRANSCODE
+manage.py vidlock_transcode courses.Lesson --pk 12 --state failed
+```
+
+The dry run probes each upload through a signed URL (only the bytes ffprobe
+needs leave the bucket) and prints one line per video, then totals:
+
+```
+courses.Lesson 41  lessons/41/IMG_0042.MOV  hevc/aac yuv420p10le HDR  1920x1080  0:14:03  812.4 MB  re-encode: hevc/aac needs a re-encode to H.264/AAC
+courses.Lesson 57  lessons/57/talk.mkv  h264/opus yuv420p  1280x720  0:48:10  402.0 MB  sound/container only, picture copied: h264/opus needs a re-encode to H.264/AAC
+2 video(s), 2 to re-encode; 1:02:13 of video (1.0 h), 1.2 GB
+```
+
+In the admin, the *Protection* column shows *Re-encoding 42% · libx264*, the
+change page shows the source, encoder, time taken or error, and the
+*Re-encode and seal* action retries the selected skipped or failed videos.
+Each re-encode is recorded in the `vidlock.Transcode` table (run `migrate`),
+and `vidlock.signals.transcode_finished` fires when one ends.
+
+## Posters and seek previews
+
+```python
+VIDLOCK = {..., 'THUMBNAILS': True}
+```
+
+Whenever a video is sealed (or re-encoded), the same job makes a poster, a
+320 px thumbnail at `THUMBNAIL_OFFSET` seconds, and sprite sheets for seek
+previews: a tile every `SPRITE_INTERVAL` seconds, `SPRITE_WIDTH` wide,
+10×10 tiles a sheet. They go to your storage next to the sealed file, under
+its random name, and are replaced when the video is sealed again. Tiles come
+from keyframes, so an hour of video takes seconds. A failure is logged and
+never fails the seal.
+
+They show the lesson, so they are served like it. `vidlock:poster`,
+`vidlock:thumbnail` and `vidlock:thumbnails` (WebVTT with `#xywh=` fragments)
+check the viewer's token and `can_watch()` on every request. The images
+redirect to a signed URL that lives `TOKEN_TTL`. `playback_info` adds
+`poster_url` and `thumbnails_url`; the bundled player sets the poster, and
+`player.thumbnailAt(seconds)` returns the tile to draw over your seek bar:
+
+```js
+player.thumbnailAt(90).then(function (tile) {
+  if (tile) preview.style.background = `url(${tile.url}) -${tile.x}px -${tile.y}px`;
+});
+```
+
+Course pages show posters before anyone has bought the course. For that,
+set `POSTER_PUBLIC = True`: the poster and thumbnail are then served without
+a token, to anyone, for sealed videos your backend allows
+(`SealedBackend.poster_visible(video)`, default yes). Put the image on the
+page with `previews.public_url(request, lesson)` (or `kind='thumbnail'`).
+The sprites and their track stay behind the viewer's token either way.
+
+Deleting a video deletes its previews: a `post_delete` receiver removes the
+rows, and the images from storage once the transaction commits (a rolled-back
+delete keeps them). If you drop a video's file but keep its row, call
+`vidlock.previews.forget(lesson)` yourself.
+
 ## What the teacher should know
 
 ```python
@@ -633,6 +843,8 @@ manage.py vidlock_status                      # videos per state, keys to rewrap
 manage.py vidlock_seal                        # seal existing videos (unsealed, pending, failed)
 manage.py vidlock_seal courses.Lesson --state failed --limit 50
 manage.py vidlock_seal --queue                # hand them to VIDLOCK['ENQUEUE_SEAL'] instead
+manage.py vidlock_transcode --dry-run         # skipped uploads that need a re-encode, with totals
+manage.py vidlock_transcode --queue           # re-encode and seal them through ENQUEUE_TRANSCODE
 manage.py vidlock_rewrap                      # re-encrypt keys under the first KEY_ENCRYPTION_KEYS
 manage.py vidlock_export courses.Lesson 42 lesson-42.mp4   # decrypt back to a playable MP4
 manage.py vidlock_trace K7QMZ4                # which account a watermark code belongs to
@@ -652,13 +864,16 @@ class LessonAdmin(SealedVideoAdminMixin, admin.ModelAdmin):
     list_filter = ('sealed_state',)
 ```
 
-The mixin adds a *Protection* column, a read-only duration and error, and a
-*Seal again* action. The action goes through `ENQUEUE_SEAL` when that is set,
-and seals inline otherwise.
+The mixin adds a *Protection* column (with a re-encode's progress), a
+read-only duration, error and re-encode line, and the *Seal again* and
+*Re-encode and seal* actions. They go through `ENQUEUE_SEAL` /
+`ENQUEUE_TRANSCODE` when those are set, and run inline otherwise.
 
 **System checks.** `manage.py check` reports:
 
 * a missing backend, storage or ffmpeg;
+* `TRANSCODE` without its own queue (`W009`), an ffmpeg without libx264 or
+  AAC (`W010`), an unknown `TRANSCODE_ENCODER` (`E007`);
 * mistyped setting names;
 * keys still derived from `SECRET_KEY`;
 * a cache that is not shared between processes. Limits, leases and scores
@@ -666,7 +881,8 @@ and seals inline otherwise.
   production.
 
 **Signals.** `vidlock.signals.seal_finished(sender=Model, pk, state, error,
-video_key)` fires after every sealing job. `key_abuse` and `viewer_flagged`
+video_key)` fires after every sealing job, and `transcode_finished(sender=Model,
+pk, state, error, encoder, video_key)` after every re-encode. `key_abuse` and `viewer_flagged`
 are described above.
 
 **Rotating the key-encryption key.** Put the new secret first
@@ -715,6 +931,18 @@ recover any video later with `vidlock_export`.
 | `ON_KEY_ABUSE` | — | Dotted path to `fn(request, user, video)`, called once a day per viewer past a limit. |
 | `KEY_ENCRYPTION_KEYS` | from `SECRET_KEY` | Secrets that encrypt the stored video keys; the first one encrypts. |
 | `ENQUEUE_SEAL` | — | Dotted path to `fn(model, pk, video_key)` that queues sealing; used by the admin and `vidlock_seal --queue`. |
+| `TRANSCODE` | `False` | Re-encode uploads that cannot be sealed as they are, then seal them. Recommended. |
+| `TRANSCODE_HEIGHT` | `720` | Shorter side of the re-encoded picture; never upscaled. |
+| `TRANSCODE_CRF` / `TRANSCODE_PRESET` | `23` / `'veryfast'` | Quality (lower is better) and libx264 speed. |
+| `TRANSCODE_ENCODER` | `'auto'` | `'auto'` (a working GPU encoder, else libx264), `'libx264'`, `'h264_nvenc'`, `'h264_qsv'`, `'h264_vaapi'`. |
+| `TRANSCODE_VAAPI_DEVICE` | `'/dev/dri/renderD128'` | |
+| `TRANSCODE_AUDIO_BITRATE` | `'128k'` | When the sound is re-encoded to AAC. |
+| `TRANSCODE_TIMEOUT` | `14400` | Seconds one re-encode may run. |
+| `ENQUEUE_TRANSCODE` / `TRANSCODE_QUEUE` | — / `'vidlock-transcode'` | Dotted path to `fn(model, pk, video_key)` that queues re-encodes; the queue the bundled wrappers use. Unset: inside the seal job. |
+| `THUMBNAILS` | `False` | Poster, thumbnail and seek-preview sprites for every sealed video. |
+| `THUMBNAIL_OFFSET` | `5` | Seconds in (at most half-way) for the poster and thumbnail. |
+| `SPRITE_INTERVAL` / `SPRITE_WIDTH` / `SPRITE_COLUMNS` | `10` / `160` / `10` | A tile every this many seconds, this wide, this many per row and column of a sheet. |
+| `POSTER_PUBLIC` | `False` | Serve poster and thumbnail without a token (course pages); sprites stay private. |
 | `HLS_JS_URL` / `HLS_JS_INTEGRITY` | bundled copy | Load hls.js from elsewhere, with a Subresource Integrity hash. |
 
 If several tenants or sites share one cache, override
@@ -728,6 +956,15 @@ player follows `<html lang>`. Corrections and new languages are welcome:
 they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 
 ## Upgrading
+
+**From 0.7 to 0.8**
+
+* Run `manage.py migrate`, which adds the `Transcode` and `Preview` tables.
+  Sealed videos keep playing as they are.
+* Everything new is off until you set `TRANSCODE` or `THUMBNAILS`. Then run
+  `manage.py vidlock_transcode --dry-run` to see the `skipped` backlog.
+* `pipeline.seal()` can now return `'transcoding'`, and `seal_finished`
+  fires only once the re-encoded video is sealed.
 
 **From 0.6 to 0.7**
 
@@ -788,7 +1025,10 @@ they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
 On Cloudflare R2 (free egress), a 45-minute lesson at 10-second segments
 costs about 270 class-B reads per full view, so the free 10 million a month
 cover roughly 37,000 full views. Sealing costs about one second of one CPU
-core per upload.
+core per upload. A re-encode (`TRANSCODE`, only for uploads that need one)
+costs minutes of CPU per lesson, plus one more download of the upload when
+it runs on its own queue. Previews add one GET per sprite sheet a viewer
+hovers over.
 
 ## FAQ
 
@@ -831,6 +1071,13 @@ MIT © Nader Yasser. The bundled hls.js is © Dailymotion, Apache-2.0 (see
 **بتعمل إيه:**
 - **بتشفّر الفيديو لوحدها بعد الرفع** بأمر ffmpeg واحد من غير إعادة ترميز،
   والـMP4 الأصلي بيتمسح (أو بيفضل لو فعّلت `KEEP_SOURCE`).
+- **فيديوهات الآيفون (HEVC) والـ10-bit والـWebM كمان:** مع `TRANSCODE = True`
+  بتتحوّل لـH.264 بجودة 720p على السيرفر بتاعك (أو كارت الشاشة لو موجود)،
+  وبعدين بتتشفّر عادي. من غيرها بتفضل زي ما اترفعت ومش محمية. أمر
+  `vidlock_transcode --dry-run` بيوريك القديم اللي محتاج تحويل وحجمه ومدته.
+- **صورة غلاف وصور معاينة على شريط التقديم** (`THUMBNAILS = True`)، وبتتعرض
+  بنفس صلاحية الفيديو. ومع `POSTER_PUBLIC = True` الغلاف بيظهر في صفحة الكورس
+  قبل الشراء.
 - **المفتاح نفسه متشفّر في الداتابيز،** فلو نسخة من الداتابيز اتسرّبت مش
   هتفتح أي فيديو.
 - **الصلاحية بتتفحص مع كل طلب:** دالتك `can_watch` بتتسأل كل مرة، فلو

@@ -24,7 +24,7 @@ import time
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
-from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseForbidden, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
 from django.utils.translation import gettext as _
 from django.utils.translation import gettext_lazy
@@ -36,6 +36,7 @@ from vidlock import (
     guard,
     keys,
     monitor,
+    previews,
     progress,
     risk,
     signals,
@@ -117,6 +118,9 @@ def playback_info(request, video, storage=None, channel=None) -> dict:
     if captions:
         extra['captions_url'] = url('vidlock:captions')
         extra['captions_language'] = captions[0] or 'und'
+    if previews.current(video) is not None:
+        extra['poster_url'] = previews.public_url(request, video) or url('vidlock:poster')
+        extra['thumbnails_url'] = url('vidlock:thumbnails')
     return {
         'format': 'hls',
         'url': url('vidlock:playlist'),
@@ -232,6 +236,66 @@ def captions_view(request, video_id):
     if found is None:
         raise Http404
     return _private(HttpResponse(transcribe.webvtt(found), content_type='text/vtt; charset=utf-8'))
+
+
+def _preview_redirect(key: str, public: bool):
+    ttl = int(conf.get('TOKEN_TTL'))
+    response = HttpResponseRedirect(default_storage().signed_url(key, ttl))
+    response['X-Content-Type-Options'] = 'nosniff'
+    response['Referrer-Policy'] = 'no-referrer'
+    # Never cached past the signed URL it points at.
+    response['Cache-Control'] = f'public, max-age={min(300, ttl // 2)}' if public else 'private, no-store'
+    return response
+
+
+def _image_view(request, video_id, field):
+    backend = _backend()
+    public = bool(conf.get('POSTER_PUBLIC'))
+    if public:
+        video = backend.get_video(video_id)
+        if video is None or not video.is_sealed or not backend.poster_visible(video):
+            raise Http404
+    else:
+        viewer, refusal = _viewer(request, video_id, backend, require_session=False)
+        if refusal:
+            return refusal
+        video = viewer.video
+    found = previews.current(video)
+    key = getattr(found, field, '') if found is not None else ''
+    if not key:
+        raise Http404
+    return _preview_redirect(key, public)
+
+
+@require_GET
+def poster_view(request, video_id):
+    """The video's poster: a redirect to a short-lived signed URL. Behind the
+    playlist's token unless ``POSTER_PUBLIC`` is on."""
+    return _image_view(request, video_id, 'poster_key')
+
+
+@require_GET
+def thumbnail_view(request, video_id):
+    """A small still of the video, like the poster."""
+    return _image_view(request, video_id, 'thumbnail_key')
+
+
+@require_GET
+def thumbnails_view(request, video_id):
+    """Seek previews as WebVTT (``#xywh=`` into sprite sheets). Always behind
+    the playlist's token and ``can_watch()``: sprites show the whole lesson."""
+    backend = _backend()
+    viewer, refusal = _viewer(request, video_id, backend, require_session=False)
+    if refusal:
+        return refusal
+    found = previews.current(viewer.video)
+    if found is None:
+        raise Http404
+    storage = default_storage()
+    # Read once by the player and used while the lesson is open, like the media URL.
+    ttl = media_ttl(viewer.video)
+    body = previews.webvtt(found, lambda key: storage.signed_url(key, ttl))
+    return _private(HttpResponse(body, content_type='text/vtt; charset=utf-8'))
 
 
 @require_GET

@@ -23,8 +23,8 @@ import uuid
 
 from django.db import transaction
 
-from vidlock import conf, keys, packager, signals, transcribe
-from vidlock.playlist import segment_count
+from vidlock import conf, keys, packager, previews, signals, transcribe
+from vidlock.playlist import duration, segment_count
 from vidlock.storage import default_storage
 
 logger = logging.getLogger(__name__)
@@ -34,8 +34,12 @@ TS_CONTENT_TYPE = 'video/mp2t'
 
 def wants(key: str | None) -> bool:
     """Worth queueing: ffmpeg is here and the upload is a container that
-    usually holds H.264. ``seal`` still probes and may skip it."""
-    return packager.available() and os.path.splitext(key or '')[1].lower() in packager.SOURCE_EXTENSIONS
+    usually holds H.264 (or, with ``TRANSCODE`` on, MKV/WebM too). ``seal``
+    still probes and may skip it."""
+    extensions = packager.SOURCE_EXTENSIONS
+    if conf.get('TRANSCODE'):
+        extensions = extensions | packager.TRANSCODE_EXTENSIONS
+    return packager.available() and os.path.splitext(key or '')[1].lower() in extensions
 
 
 def seal_later(instance, video_key: str | None = None) -> bool:
@@ -82,10 +86,14 @@ def _mark(model, pk, source_key, state, error):
 
 
 def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = None) -> str:
-    """Returns the resulting state: 'sealed', 'skipped', 'failed' or 'stale'.
+    """Returns the resulting state: 'sealed', 'skipped', 'failed' or 'stale' —
+    or 'transcoding' when the upload needs a re-encode and was handed to
+    ``VIDLOCK['ENQUEUE_TRANSCODE']`` (see ``vidlock.transcode``).
 
     ``delete_source`` defaults to ``not VIDLOCK['KEEP_SOURCE']``.
     """
+    from vidlock import transcode
+
     storage = storage or default_storage()
     if delete_source is None:
         delete_source = not conf.get('KEEP_SOURCE')
@@ -95,40 +103,64 @@ def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = 
     if not packager.available():
         return _mark(model, pk, source_key, model.STATE_SKIPPED, 'ffmpeg is not installed')
 
-    target = sealed_key_for(source_key)
-    audio = None
-    try:
-        with tempfile.TemporaryDirectory(prefix='vidlock-') as work:
-            source = os.path.join(work, 'source' + os.path.splitext(source_key)[1].lower())
+    with tempfile.TemporaryDirectory(prefix='vidlock-') as work:
+        source = os.path.join(work, 'source' + os.path.splitext(source_key)[1].lower())
+        try:
             storage.download(source_key, source)
             found = packager.probe(source)
-            if not isinstance(found, packager.Probe):
-                found = packager.Probe(*found)
-            if found.problem:
-                logger.info('%s %s not sealed: %s', model.__name__, pk, found.problem)
-                return _mark(model, pk, source_key, model.STATE_SKIPPED, found.problem)
-            ts_path, playlist, key = packager.package(source, work)
-            if conf.get('TRANSCRIBER'):
-                # The clear source is only here; keep its audio for after the swap.
-                fd, audio = tempfile.mkstemp(prefix='vidlock-audio-', suffix='.wav')
-                os.close(fd)
-                try:
-                    transcribe.extract_audio(source, audio)
-                except transcribe.NoAudio:
-                    logger.info('%s %s has no sound; not transcribing it', model.__name__, pk)
-                    os.remove(audio)
-                    audio = None
-                except Exception:
-                    logger.exception('audio for transcribing %s %s', model.__name__, pk)
-                    os.remove(audio)
-                    audio = None
-            size = os.path.getsize(ts_path)
-            # A storage may save under another name (Django storages avoid
-            # overwrites); the name it returns is the one that exists.
-            target = storage.upload(ts_path, target, TS_CONTENT_TYPE) or target
+        except Exception as exc:
+            logger.exception('sealing %s %s failed', model.__name__, pk)
+            return _mark(model, pk, source_key, model.STATE_FAILED, f'{type(exc).__name__}: {exc}')
+        if not isinstance(found, packager.Probe):
+            found = packager.Probe(*found)
+        if transcode.needs(found, source):
+            problem = found.problem or f'{os.path.splitext(source_key)[1]} needs a re-encode'
+            if not (transcode.enabled() and transcode.can_fix(found)):
+                logger.info('%s %s not sealed: %s', model.__name__, pk, problem)
+                return _mark(model, pk, source_key, model.STATE_SKIPPED, problem)
+            if transcode.queue(model, pk, source_key, found.describe()):
+                logger.info('%s %s queued for a re-encode: %s', model.__name__, pk, problem)
+                return transcode.QUEUED
+            return transcode.encode_and_seal(
+                model, pk, source_key, source, found, work, storage, delete_source
+            )
+        return seal_local(model, pk, source_key, source, work, storage, delete_source)
+
+
+def seal_local(model, pk, source_key: str, source: str, work: str, storage, delete_source: bool) -> str:
+    """Seal a sealable file already on local disk (the upload, or its
+    re-encode) in place of the row's ``source_key``, and swap it in."""
+    target = sealed_key_for(source_key)
+    audio = None
+    made = None
+    try:
+        ts_path, playlist, key = packager.package(source, work)
+        if conf.get('TRANSCRIBER'):
+            # The clear source is only here; keep its audio for after the swap.
+            fd, audio = tempfile.mkstemp(prefix='vidlock-audio-', suffix='.wav')
+            os.close(fd)
+            try:
+                transcribe.extract_audio(source, audio)
+            except transcribe.NoAudio:
+                logger.info('%s %s has no sound; not transcribing it', model.__name__, pk)
+                os.remove(audio)
+                audio = None
+            except Exception:
+                logger.exception('audio for transcribing %s %s', model.__name__, pk)
+                os.remove(audio)
+                audio = None
+        size = os.path.getsize(ts_path)
+        # A storage may save under another name (Django storages avoid
+        # overwrites); the name it returns is the one that exists.
+        target = storage.upload(ts_path, target, TS_CONTENT_TYPE) or target
+        if previews.enabled():
+            # Never fails the seal: None when they could not be made.
+            made = previews.prepare(source, work, duration(playlist), target, storage)
     except Exception as exc:
         logger.exception('sealing %s %s failed', model.__name__, pk)
         storage.delete(target)
+        for stored in previews.stored_keys(made):
+            storage.delete(stored)
         if audio and os.path.exists(audio):
             os.remove(audio)
         return _mark(model, pk, source_key, model.STATE_FAILED, f'{type(exc).__name__}: {exc}')
@@ -150,16 +182,27 @@ def seal(model, pk, source_key: str, storage=None, delete_source: bool | None = 
     except Exception:
         # An object no row names is billed for ever and shows on no meter.
         storage.delete(target)
+        for stored in previews.stored_keys(made):
+            storage.delete(stored)
         if audio and os.path.exists(audio):
             os.remove(audio)
         raise
     if current != [source_key]:
         storage.delete(target)
+        for stored in previews.stored_keys(made):
+            storage.delete(stored)
         if audio and os.path.exists(audio):
             os.remove(audio)
         return _finished(model, pk, 'stale', video_key=(current or [''])[0])
     # Only after the row points at the .ts: a viewer halfway through the MP4
     # gets an error, and a player that retries receives the sealed stream.
+    if made:
+        try:
+            previews.save(model, pk, target, made, storage)
+        except Exception:
+            logger.exception('recording the previews of %s %s failed', model.__name__, pk)
+            for stored in previews.stored_keys(made):
+                storage.delete(stored)
     if delete_source:
         storage.delete(source_key)
     logger.info('%s %s sealed (%s bytes, %s segments)', model.__name__, pk, size, segment_count(playlist))

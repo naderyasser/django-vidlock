@@ -542,6 +542,48 @@
       video.appendChild(captions);
     }
 
+    // The poster, when the video has previews and the page set none.
+    function showPoster(data) {
+      if (data.poster_url && options.poster !== false && !video.getAttribute('poster')) {
+        video.poster = data.poster_url;
+      }
+    }
+
+    // Seek previews (thumbnails.vtt). Fetched on first use and kept; the
+    // sprite URLs inside it live as long as the lesson's media URL.
+    let thumbnailsUrl = null;
+    let thumbnailCues = null;
+    function rememberThumbnails(data) { thumbnailsUrl = data.thumbnails_url || null; }
+    function parseStamp(text) {
+      const parts = text.trim().split(':').map(parseFloat);
+      return parts.reduce(function (total, part) { return total * 60 + part; }, 0);
+    }
+    function loadThumbnails() {
+      if (thumbnailCues) return Promise.resolve(thumbnailCues);
+      if (!thumbnailsUrl) return Promise.resolve([]);
+      return fetch(thumbnailsUrl, { credentials: 'same-origin' }).then(function (response) {
+        if (!response.ok) return [];
+        return response.text().then(function (body) {
+          const cues = [];
+          const lines = body.split(/\r?\n/);
+          for (let i = 0; i < lines.length; i++) {
+            const times = lines[i].split('-->');
+            if (times.length !== 2 || !lines[i + 1]) continue;
+            const target = lines[i + 1].trim();
+            const hash = target.indexOf('#xywh=');
+            if (hash < 0) continue;
+            const box = target.slice(hash + 6).split(',').map(Number);
+            cues.push({
+              start: parseStamp(times[0]), end: parseStamp(times[1]), url: target.slice(0, hash),
+              x: box[0], y: box[1], width: box[2], height: box[3],
+            });
+          }
+          thumbnailCues = cues;
+          return cues;
+        });
+      }).catch(function () { return []; });
+    }
+
     function showWatermark(data) {
       if (options.watermark === false) return;
       const custom = typeof options.watermark === 'object' && options.watermark ? options.watermark : {};
@@ -663,6 +705,8 @@
         if (!(await attachSource(data, position, wasPlaying))) return;
         showWatermark(data);
         showCaptions(data);
+        showPoster(data);
+        rememberThumbnails(data);
         startHeartbeat(data);
         onStatus(null);
         if (data.expires_in) scheduleRenewal(data.expires_in);
@@ -710,6 +754,19 @@
         const go = function () { video.currentTime = seconds; video.play().catch(function () {}); };
         if (video.readyState >= 1) go();
         else video.addEventListener('loadedmetadata', function once() { video.removeEventListener('loadedmetadata', once); go(); });
+      },
+      // Where the seek-preview tile for a moment is: {url, x, y, width, height}
+      // in its sprite sheet (draw it as a CSS background), or null.
+      thumbnailAt: function (seconds) {
+        return loadThumbnails().then(function (cues) {
+          for (let i = 0; i < cues.length; i++) {
+            if (seconds >= cues[i].start && seconds < cues[i].end) {
+              const cue = cues[i];
+              return { url: cue.url, x: cue.x, y: cue.y, width: cue.width, height: cue.height };
+            }
+          }
+          return null;
+        });
       },
       reload: function () {
         stopped = false;

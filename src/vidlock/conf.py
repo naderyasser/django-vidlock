@@ -140,6 +140,47 @@ DEFAULTS: dict[str, Any] = {
     # your task runner. Used by the admin's "Seal again" action; unset, the
     # action seals inline in the request.
     'ENQUEUE_SEAL': None,
+    # Re-encode uploads that cannot be sealed as they are (HEVC from iPhones,
+    # 10-bit, VP9/AV1, MKV/WebM, Opus or AC-3 sound) to H.264 High 8-bit 4:2:0
+    # + AAC, then seal them. Off: they are marked 'skipped' and stay
+    # unprotected, as before. Recommended on.
+    'TRANSCODE': False,
+    # The shorter side of the re-encoded picture (720 → 1280x720, or 720x1280
+    # for portrait). Never upscales.
+    'TRANSCODE_HEIGHT': 720,
+    # libx264's quality (lower is better and bigger) and speed. Hardware
+    # encoders get the same number as their constant-quality target.
+    'TRANSCODE_CRF': 23,
+    'TRANSCODE_PRESET': 'veryfast',
+    # 'auto': the first hardware encoder that really works on this machine
+    # (h264_nvenc, h264_qsv, h264_vaapi), else libx264. 'libx264' turns
+    # hardware off; a hardware encoder's name forces it (libx264 still takes
+    # over if it fails).
+    'TRANSCODE_ENCODER': 'auto',
+    'TRANSCODE_VAAPI_DEVICE': '/dev/dri/renderD128',
+    'TRANSCODE_AUDIO_BITRATE': '128k',
+    # The longest one re-encode may run, in seconds.
+    'TRANSCODE_TIMEOUT': 4 * 3600,
+    # Optional dotted path: fn(model, pk, video_key) that queues a re-encode on
+    # its own queue (vidlock.contrib.celery.enqueue_transcode…). None: the
+    # re-encode runs inside the seal job that found it.
+    'ENQUEUE_TRANSCODE': None,
+    # Queue name the bundled task wrappers send re-encodes to.
+    'TRANSCODE_QUEUE': 'vidlock-transcode',
+    # Make a poster, a thumbnail and seek-preview sprites (vidlock.previews)
+    # whenever a video is sealed.
+    'THUMBNAILS': False,
+    # Seconds into the video for the poster and the thumbnail (at most half-way).
+    'THUMBNAIL_OFFSET': 5,
+    # One preview tile every this many seconds, this wide, this many per row
+    # (and per column) of a sprite sheet.
+    'SPRITE_INTERVAL': 10,
+    'SPRITE_WIDTH': 160,
+    'SPRITE_COLUMNS': 10,
+    # Serve the poster and thumbnail without a viewer token (course pages show
+    # them before purchase); SealedBackend.poster_visible() still decides.
+    # Seek-preview sprites stay behind the viewer's token either way.
+    'POSTER_PUBLIC': False,
     # Where the player loads hls.js from. None: the copy bundled with vidlock
     # (served from your static files). A CDN URL works too; pair it with
     # HLS_JS_INTEGRITY.

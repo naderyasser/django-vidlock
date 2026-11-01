@@ -1,3 +1,4 @@
+import os
 import shutil
 
 from vidlock.storage import Storage
@@ -49,6 +50,8 @@ def _memory_upload_target(self, key, content_type, ttl):
 
 def _memory_size(self, key):
     found = OBJECTS.get(key)
+    if isinstance(found, str):  # a local file standing in for an upload
+        return os.path.getsize(found)
     return len(found[0]) if found else None
 
 

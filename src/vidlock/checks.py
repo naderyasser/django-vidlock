@@ -29,6 +29,7 @@ def check_settings(app_configs, **kwargs):
         ('STORAGE', 'vidlock.E002'),
         ('ON_KEY_ABUSE', 'vidlock.E003'),
         ('ENQUEUE_SEAL', 'vidlock.E004'),
+        ('ENQUEUE_TRANSCODE', 'vidlock.E006'),
     ):
         try:
             conf.load(name)
@@ -100,6 +101,8 @@ def check_settings(app_configs, **kwargs):
             )
         )
 
+    problems.extend(_transcode_problems())
+
     if not conf.get('KEY_ENCRYPTION_KEYS'):
         problems.append(
             Warning(
@@ -111,4 +114,50 @@ def check_settings(app_configs, **kwargs):
                 id='vidlock.W006',
             )
         )
+    return problems
+
+
+def _transcode_problems():
+    from vidlock import transcode
+
+    problems = []
+    choice = conf.get('TRANSCODE_ENCODER') or 'auto'
+    if choice != 'auto' and choice not in transcode.ENCODERS:
+        problems.append(
+            Error(
+                f"VIDLOCK['TRANSCODE_ENCODER'] = {choice!r} is not one of "
+                f"auto, {', '.join(transcode.ENCODERS)}.",
+                id='vidlock.E007',
+            )
+        )
+    if not conf.get('TRANSCODE'):
+        return problems
+    if not conf.get('ENQUEUE_TRANSCODE'):
+        timeout = int(conf.get('TRANSCODE_TIMEOUT'))
+        problems.append(
+            Warning(
+                "VIDLOCK['TRANSCODE'] is on but ENQUEUE_TRANSCODE is not set: every re-encode runs "
+                'inside the seal job that found it. One long HEVC or 4K upload can then block the '
+                f'seal queue for hours, and a worker time limit shorter than TRANSCODE_TIMEOUT '
+                f'({timeout} s) kills the encode halfway and leaves the video unsealed.',
+                hint=(
+                    "Set ENQUEUE_TRANSCODE (e.g. 'vidlock.contrib.celery.enqueue_transcode') and run "
+                    f"a dedicated worker for the {conf.get('TRANSCODE_QUEUE')!r} queue with "
+                    'concurrency 1 and a time limit of at least TRANSCODE_TIMEOUT.'
+                ),
+                id='vidlock.W009',
+            )
+        )
+    binary = packager.ffmpeg_binary()
+    if binary:
+        missing = {'libx264', 'aac'} - transcode.compiled_encoders(binary)
+        if missing:
+            problems.append(
+                Warning(
+                    f'ffmpeg ({binary}) has no {" or ".join(sorted(missing))} encoder; '
+                    're-encodes will fail on this machine.',
+                    hint='Install a full ffmpeg build (Debian/Ubuntu: apt install ffmpeg) on the worker.',
+                    id='vidlock.W010',
+                )
+            )
     return problems
