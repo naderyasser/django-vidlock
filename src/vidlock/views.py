@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import time
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -390,9 +389,11 @@ def heartbeat_view(request, video_id):
     if risk.is_suspended(user.pk, namespace) and monitor.would_refuse('suspended', request, user):
         return JsonResponse({'error': 'suspended', 'message': str(_SUSPENDED)}, status=403)
     # A player beats every 30 s (and on pause); more than once a second from
-    # one stream is a script.
-    beat_key = f'vidlock:beat:{namespace}:{user.pk}:{found.lease or video_id}:{int(time.time())}'
-    if not cache.add(beat_key, 1, 2):
+    # one stream is a script. One key per stream that lives a second: keyed
+    # by the clock's second instead, two beats a millisecond apart across a
+    # second boundary both got through.
+    beat_key = f'vidlock:beat:{namespace}:{user.pk}:{found.lease or video_id}'
+    if not cache.add(beat_key, 1, 1):
         return JsonResponse({'error': 'slow down'}, status=429)
     video = backend.get_video(video_id)
     if video is None or not video.is_sealed or not backend.can_watch(user, video):

@@ -128,7 +128,7 @@ class TestHeartbeatAbuse:
         for n in range(20):
             with (
                 mock.patch('vidlock.progress.time.time', return_value=now + n * 1.01),
-                mock.patch('vidlock.views.time.time', return_value=now + n * 1.01),
+                mock.patch('time.time', return_value=now + n * 1.01),
             ):
                 beat(client, lesson, student, watched=[[0, 25]])
         got = row(student, lesson)
@@ -144,6 +144,16 @@ class TestHeartbeatAbuse:
         t = tokens.sign(lesson.pk, student.pk, tokens.WEB, tokens.account_fingerprint(student), 'sess', 'L1')
         answer = client.post(f'/sealed/{lesson.pk}/heartbeat?t={t}', '{}', content_type='application/json')
         assert answer.status_code == 403
+
+    def test_a_second_boundary_does_not_let_two_beats_through(self, client, lesson, student):
+        # Keyed by the clock's second, 999.999 and 1000.001 were two buckets.
+        clock = [999.999]
+        with mock.patch('time.time', side_effect=lambda: clock[0]):
+            assert beat(client, lesson, student).status_code == 200
+            clock[0] = 1000.001
+            assert beat(client, lesson, student).status_code == 429
+            clock[0] = 1001.1
+            assert beat(client, lesson, student).status_code == 200, 'a second later it is fine'
 
     def test_revoked_access_stops_heartbeats(self, client, lesson, student):
         lesson.students.clear()
