@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.0 — unreleased
+
+### Edge delivery in front of R2
+
+* `DELIVERY = 'edge'` (off by default; `'direct'` is unchanged): the media
+  URL in `playback_info` and in every playlist points at `EDGE_URL`, signed
+  by `vidlock.edge` with HMAC-SHA256 over the object, an expiry and a viewer
+  tag, under the first of `EDGE_SECRETS` (rotate by putting a new one
+  first). The unsealed MP4, previews, keys and playlists are untouched.
+* `edge/cloudflare-worker/`: a Worker that verifies the signature in
+  constant time, reads R2 through a binding, answers Range requests, and
+  caches each encrypted range under a key without the token. It serves
+  sealed `.ts` objects only, and CORS to `ALLOWED_ORIGINS` only, never `*`.
+  `x-vidlock-edge` and `x-vidlock-cache` say what happened. A
+  `wrangler.toml` template, a README with the route, rotation and a
+  verification checklist, tests under Node, and a local harness that serves
+  a folder like a bucket.
+* Checks `E008`, `E009`, `W011`, `W012`; a `vidlock_doctor` step that
+  reads a test object through the Worker (206, MISS then HIT, 403 when
+  tampered).
+
+### Measuring delivery
+
+* `scripts/vidlock_bench.py` (standard library only): plays a sealed
+  video's byte ranges like a player and prints per-request TTFB, status,
+  cache status, the Cloudflare data centre and throughput, with
+  p50/p90/p99 per pass; `--json` and `--compare` for before/after.
+  `manage.py vidlock_bench_url` prints the playlist URL to give it.
+
 ## 0.8.0 — 2026-11-01
 
 ### Re-encoding uploads that cannot be sealed as they are

@@ -851,6 +851,7 @@ manage.py vidlock_trace K7QMZ4                # which account a watermark code b
 manage.py vidlock_transcribe                  # captions and search for videos sealed before
 manage.py vidlock_insights --send --nudge     # daily: report to teachers, remind students
 manage.py vidlock_risk amira --clear          # a viewer's risk score; lift a pause
+manage.py vidlock_bench_url courses.Lesson 42 --user bench   # a playlist URL for scripts/vidlock_bench.py
 ```
 
 **Admin**
@@ -872,6 +873,8 @@ read-only duration, error and re-encode line, and the *Seal again* and
 **System checks.** `manage.py check` reports:
 
 * a missing backend, storage or ffmpeg;
+* edge delivery without its URL or secret (`E009`), over plain HTTP
+  (`W011`) or with a short secret (`W012`);
 * `TRANSCODE` without its own queue (`W009`), an ffmpeg without libx264 or
   AAC (`W010`), an unknown `TRANSCODE_ENCODER` (`E007`);
 * mistyped setting names;
@@ -943,6 +946,8 @@ recover any video later with `vidlock_export`.
 | `THUMBNAIL_OFFSET` | `5` | Seconds in (at most half-way) for the poster and thumbnail. |
 | `SPRITE_INTERVAL` / `SPRITE_WIDTH` / `SPRITE_COLUMNS` | `10` / `160` / `10` | A tile every this many seconds, this wide, this many per row and column of a sheet. |
 | `POSTER_PUBLIC` | `False` | Serve poster and thumbnail without a token (course pages); sprites stay private. |
+| `DELIVERY` | `'direct'` | `'edge'`: sealed media through the Cloudflare Worker in [`edge/cloudflare-worker`](edge/cloudflare-worker/). |
+| `EDGE_URL` / `EDGE_SECRETS` | — / `[]` | The Worker's domain; HMAC secrets shared with it (the first signs, all verify). |
 | `HLS_JS_URL` / `HLS_JS_INTEGRITY` | bundled copy | Load hls.js from elsewhere, with a Subresource Integrity hash. |
 
 If several tenants or sites share one cache, override
@@ -1019,6 +1024,63 @@ they live in `src/vidlock/locale/` and in `MESSAGES` inside `player.js`.
   `video, audio = probe(path)`.
 * New checks may skip 10-bit and 4:4:4 H.264 that 0.1 sealed but browsers
   could not play.
+
+## Edge delivery (Cloudflare, in front of R2)
+
+By default the player reads sealed media straight from the bucket through
+presigned URLs. Every byte range is a request to R2, with no cache in
+between. On Cloudflare, a Worker can serve the media from the edge instead
+(opt-in):
+
+```python
+VIDLOCK = {
+    ...,
+    'DELIVERY': 'edge',
+    'EDGE_URL': 'https://media.courses.example',  # the Worker's custom domain
+    'EDGE_SECRETS': [env('VIDLOCK_EDGE_SECRET')],  # shared with the Worker; first one signs
+}
+```
+
+* **Signing.** Django signs each media URL with HMAC-SHA256 over the
+  object, an expiry and a viewer tag.
+* **The Worker** ([`edge/cloudflare-worker/`](edge/cloudflare-worker/))
+  checks the signature, reads R2 through a binding (the bucket stays
+  private), answers Range requests, and caches the **encrypted** ranges
+  under a key without the token, so all viewers in a data centre share
+  them.
+* **Unchanged:** keys and playlists stay on Django with every check they
+  have today, and the Worker serves sealed `.ts` objects and nothing else.
+
+Setup, secret rotation, the DNS/route and a verification checklist are in
+[edge/cloudflare-worker/README.md](edge/cloudflare-worker/README.md).
+Measure before you switch (below).
+
+## Measuring delivery
+
+`scripts/vidlock_bench.py` measures how a sealed video's bytes reach a
+viewer, from wherever you run it. It needs nothing but Python 3.8+, so copy
+the one file to a laptop in Cairo or Riyadh. It plays through the video's
+byte ranges like a player (the playlist's exact `BYTERANGE`s, in order, on
+one kept-alive connection, then a few seeks) and never asks for a key.
+
+```bash
+# on your server: a playlist URL for an account made for measuring (lives TOKEN_TTL)
+manage.py vidlock_bench_url courses.Lesson 42 --user bench --base https://courses.example
+```
+
+```bash
+# on the client machine
+python3 vidlock_bench.py '<playlist URL>' --label 'Cairo, WE fibre, direct R2' --json cairo-direct.json
+python3 vidlock_bench.py --compare cairo-direct.json riyadh-direct.json
+```
+
+Each request prints its status, size, connect time, TTFB, total time,
+throughput, `cf-cache-status`, the Cloudflare data centre that answered
+(from `cf-ray`, e.g. `CAI`, `JED`, `RUH`) and the `Content-Range`. A range
+the server did not honour is flagged. The summary gives TTFB p50/p90/p99 and
+throughput per pass. `--mode all` plays every range, `--passes 2` repeats
+them (a cache shows `MISS`, then `HIT`), and `--seed` keeps the seeks the
+same between runs, so they compare.
 
 ## Costs
 

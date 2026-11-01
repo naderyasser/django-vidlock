@@ -181,6 +181,17 @@ DEFAULTS: dict[str, Any] = {
     # them before purchase); SealedBackend.poster_visible() still decides.
     # Seek-preview sprites stay behind the viewer's token either way.
     'POSTER_PUBLIC': False,
+    # How the player reads sealed media: 'direct' (presigned bucket URLs, as
+    # before) or 'edge' (a Cloudflare Worker in front of R2 that caches the
+    # encrypted ranges; see vidlock.edge and edge/cloudflare-worker). Keys and
+    # playlists are served by Django either way.
+    'DELIVERY': 'direct',
+    # The Worker's custom domain, e.g. 'https://media.courses.example'.
+    'EDGE_URL': '',
+    # HMAC secrets shared with the Worker (VIDLOCK_EDGE_SECRETS there). The
+    # first signs; the Worker accepts any it has. Rotate by putting a new one
+    # first on both sides.
+    'EDGE_SECRETS': [],
     # Where the player loads hls.js from. None: the copy bundled with vidlock
     # (served from your static files). A CDN URL works too; pair it with
     # HLS_JS_INTEGRITY.

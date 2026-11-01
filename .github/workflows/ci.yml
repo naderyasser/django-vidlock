@@ -20,6 +20,8 @@ jobs:
       - run: ruff check . && black --check .
       - name: player.js parses
         run: node --check src/vidlock/static/vidlock/player.js
+      - name: edge Worker tests
+        run: cd edge/cloudflare-worker && node --test test/*.test.mjs
       - name: translations compile
         run: |
           sudo apt-get update -q && sudo apt-get install -yq gettext

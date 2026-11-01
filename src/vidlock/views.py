@@ -33,6 +33,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from vidlock import (
     conf,
+    edge,
     guard,
     keys,
     monitor,
@@ -126,7 +127,7 @@ def playback_info(request, video, storage=None, channel=None) -> dict:
         'url': url('vidlock:playlist'),
         # The bundled player swaps these into requests already in flight, so
         # renewing before expiry never reloads the stream mid-sentence.
-        'media_url': storage.signed_url(video.video_key, ttl),
+        'media_url': edge.media_url(storage, video, ttl, user.pk, lease),
         'key_url': url('vidlock:key'),
         'heartbeat_url': url('vidlock:heartbeat'),
         'heartbeat_interval': int(conf.get('HEARTBEAT_SECONDS')),
@@ -216,7 +217,7 @@ def playlist_view(request, video_id):
     storage = default_storage()
     body = render(
         video.sealed_playlist,
-        media_url=storage.signed_url(video.video_key, media_ttl(video)),
+        media_url=edge.media_url(storage, video, media_ttl(video), viewer.user.pk, viewer.claims.lease),
         key_url=with_token(request.build_absolute_uri(reverse('vidlock:key', args=[video.pk])), token),
     )
     return _private(HttpResponse(body, content_type=CONTENT_TYPE))

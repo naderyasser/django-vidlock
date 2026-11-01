@@ -13,3 +13,8 @@ coverage.xml
 htmlcov/
 example/demo.sqlite3
 example/media/
+
+# Your own Worker config (copy of wrangler.toml.example) and wrangler's state
+edge/cloudflare-worker/wrangler.toml
+edge/cloudflare-worker/.wrangler/
+edge/cloudflare-worker/node_modules/
