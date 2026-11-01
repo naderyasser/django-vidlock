@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.0 — unreleased
+## 0.8.0 — 2026-11-01
 
 ### Re-encoding uploads that cannot be sealed as they are
 
