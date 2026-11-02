@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.2 — unreleased
+
+### Fixes
+
+* `collectstatic` with `ManifestStaticFilesStorage` no longer fails on
+  `vidlock/vendor/hls.light.min.js.map`: the bundled hls.js named a source
+  map that is not shipped. The reference is removed (the code is unchanged).
+
 ## 0.8.1 — 2026-11-01
 
 ### Risk score

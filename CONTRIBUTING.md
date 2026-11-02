@@ -53,8 +53,11 @@ and add the player's five messages to `MESSAGES` in `player.js`.
 ## Updating hls.js
 
 Replace `src/vidlock/static/vidlock/vendor/hls.light.min.js` with the new
-release's `dist/hls.light.min.js` (and its LICENSE), update the version in
-the README and in `player.js`'s CDN fallback, and run the browser test.
+release's `dist/hls.light.min.js` (and its LICENSE), delete its last line
+(`//# sourceMappingURL=hls.light.min.js.map`: the map is not shipped, and
+`ManifestStaticFilesStorage` refuses a file that names a missing one;
+`tests/test_static.py` checks), update the version in the README and in
+`player.js`'s CDN fallback, and run the browser test.
 
 ## Releasing
 
