@@ -138,7 +138,8 @@ class TestHeartbeatAbuse:
 
     def test_more_than_one_heartbeat_a_second_is_refused(self, client, lesson, student):
         assert beat(client, lesson, student).status_code == 200
-        assert beat(client, lesson, student).status_code == 429
+        refused = beat(client, lesson, student)
+        assert refused.status_code == 429 and refused['Retry-After'] == '1'
 
     def test_a_web_token_needs_its_session(self, client, lesson, student):
         t = tokens.sign(lesson.pk, student.pk, tokens.WEB, tokens.account_fingerprint(student), 'sess', 'L1')

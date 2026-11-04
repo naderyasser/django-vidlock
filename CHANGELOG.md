@@ -4,6 +4,13 @@
 
 ### Fixes
 
+* The bundled player no longer sends two heartbeats within a second. A
+  beat on play or pause could land next to the periodic one and get a 429
+  (4 in 10 in a real-browser run): nothing was lost, since the player
+  re-sends what was watched, but each one logged a console error. Beats
+  are now at least 1.5 s apart (a due one waits its turn), and the interval
+  restarts after an event beat. Leaving the page still sends at once. The
+  heartbeat's 429 now carries `Retry-After: 1`.
 * `collectstatic` with `ManifestStaticFilesStorage` no longer fails on
   `vidlock/vendor/hls.light.min.js.map`: the bundled hls.js named a source
   map that is not shipped. The reference is removed (the code is unchanged).
