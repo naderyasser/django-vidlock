@@ -394,7 +394,9 @@ def heartbeat_view(request, video_id):
     # second boundary both got through.
     beat_key = f'vidlock:beat:{namespace}:{user.pk}:{found.lease or video_id}'
     if not cache.add(beat_key, 1, 1):
-        return JsonResponse({'error': 'slow down'}, status=429)
+        refused = JsonResponse({'error': 'slow down'}, status=429)
+        refused['Retry-After'] = '1'
+        return refused
     video = backend.get_video(video_id)
     if video is None or not video.is_sealed or not backend.can_watch(user, video):
         return JsonResponse({'error': 'expired'}, status=403)

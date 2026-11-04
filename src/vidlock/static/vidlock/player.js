@@ -405,6 +405,9 @@
     let renewTimer = null;
     let renewDue = false;
     let beatTimer = null;
+    let beatEvery = 30000;
+    let beatSentAt = -Infinity;
+    let beatLater = null;
     let lastBeatAt = 0;
     let hls = null;
     let native = false;
@@ -452,6 +455,7 @@
       dropNative();
       clearTimeout(renewTimer);
       clearInterval(beatTimer);
+      clearTimeout(beatLater);
       beatTimer = null;
       onStatus(message);
       if (options.onEvicted) options.onEvicted(message);
@@ -485,8 +489,18 @@
       return watched.splice(0, watched.length);
     }
 
-    function beat() {
+    // The server takes one heartbeat a second per stream. A beat due sooner
+    // after the last one (a play or pause right next to a tick) waits for
+    // its turn instead of being refused; nothing is dropped. Leaving the
+    // page cannot wait, so that one goes now.
+    function beat(now) {
       if (!fresh.heartbeat || destroyed || stopped) return;
+      const wait = beatSentAt + 1500 - Date.now();
+      if (wait > 0 && !now) {
+        if (!beatLater) beatLater = setTimeout(function () { beatLater = null; beat(); }, wait);
+        return;
+      }
+      beatSentAt = Date.now();
       const moved = Math.abs(video.currentTime - lastBeatAt) > 0.5;
       lastBeatAt = video.currentTime;
       const played = takeWatched();
@@ -517,16 +531,26 @@
     function startHeartbeat(data) {
       fresh.heartbeat = data.heartbeat_url;
       if (!data.heartbeat_url || beatTimer) return;
-      beatTimer = setInterval(beat, Math.max(2, data.heartbeat_interval || 30) * 1000);
+      beatEvery = Math.max(2, data.heartbeat_interval || 30) * 1000;
+      beatTimer = setInterval(beat, beatEvery);
     }
 
-    function onPlaying() { setTimeout(beat, 3000); }
+    // After a beat sent for an event, the next tick is a full interval away.
+    function beatNow(now) {
+      beat(now);
+      if (beatTimer) {
+        clearInterval(beatTimer);
+        beatTimer = setInterval(beat, beatEvery);
+      }
+    }
+
+    function onPlaying() { setTimeout(beatNow, 3000); }
 
     // Report what was just watched before it is lost: on pause, at the end,
     // and when the page goes away (keepalive lets that request finish).
-    function onStop() { closeRun(); if (watched.length) beat(); }
+    function onStop() { closeRun(); if (watched.length) beatNow(); }
     function onSeeking() { closeRun(); }
-    function onPageHide() { onStop(); }
+    function onPageHide() { closeRun(); if (watched.length) beatNow(true); }
 
     // Captions from the lesson's transcript, when it has one. One <track>,
     // kept across renewals (its URL carries the first token; the browser
@@ -777,6 +801,7 @@
         destroyed = true;
         clearTimeout(renewTimer);
         clearInterval(beatTimer);
+        clearTimeout(beatLater);
         video.removeEventListener('error', onError);
         video.removeEventListener('play', renewIfDue);
         video.removeEventListener('playing', onPlaying);

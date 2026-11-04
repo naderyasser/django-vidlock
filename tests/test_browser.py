@@ -133,6 +133,16 @@ def test_a_sealed_video_is_keyed_decrypted_and_watermarked(watching, live_server
             page.wait_for_timeout(250)
         assert report['viewers'] == 1 and report['seconds_watched'] > 5 and any(report['heatmap']), report
 
+        # Pausing and resuming next to the 2-second ticks: the player spaces
+        # its beats, so the server's one-a-second limit never refuses one.
+        for _ in range(6):
+            page.evaluate("document.getElementById('player').play()")
+            page.wait_for_timeout(700)
+            page.evaluate("document.getElementById('player').pause()")
+            page.wait_for_timeout(300)
+        page.wait_for_timeout(2500)
+        assert 429 not in seen['beats'], seen['beats']
+
     for _ in range(40):
         if 200 in seen['beats']:
             break
